@@ -39,7 +39,6 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
-      - LICENSE*
       - configs/default.yaml
       - configs/strict.yaml
       - configs/permissive.yaml
