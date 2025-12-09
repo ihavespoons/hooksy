@@ -1,0 +1,30 @@
+# Binaries
+hooksy
+hooksy.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build output
+/build/
+/dist/
+
+# Test artifacts
+coverage.out
+coverage.html
+*.test
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Go
+vendor/
+
+# Logs
+*.log
