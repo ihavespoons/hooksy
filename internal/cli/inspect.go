@@ -35,14 +35,14 @@ Example:
 func init() {
 	inspectCmd.Flags().StringVarP(&eventType, "event", "e", "", "Hook event type (required)")
 	inspectCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would happen without blocking")
-	inspectCmd.MarkFlagRequired("event")
+	_ = inspectCmd.MarkFlagRequired("event")
 	rootCmd.AddCommand(inspectCmd)
 }
 
 func runInspect(cmd *cobra.Command, args []string) error {
 	// Initialize logging
 	if verbose {
-		logger.Init("debug", "")
+		_ = logger.Init("debug", "")
 	} else {
 		logger.InitQuiet()
 	}

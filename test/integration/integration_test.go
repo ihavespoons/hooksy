@@ -15,7 +15,7 @@ var binaryPath string
 func TestMain(m *testing.M) {
 	// Get the project root directory
 	projectRoot := getProjectRoot()
-	
+
 	// Build the binary before running tests
 	binaryPath = filepath.Join(projectRoot, "hooksy_test")
 	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/hooksy")
@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	// Cleanup
-	os.Remove(binaryPath)
+	_ = os.Remove(binaryPath)
 	os.Exit(code)
 }
 
@@ -140,7 +140,9 @@ func TestInspect_PreToolUse_CurlPipeBlocked(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	hso := output["hookSpecificOutput"].(map[string]interface{})
 	if hso["permissionDecision"] != "deny" {
@@ -161,7 +163,9 @@ func TestInspect_PreToolUse_SensitiveFileBlocked(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	hso := output["hookSpecificOutput"].(map[string]interface{})
 	if hso["permissionDecision"] != "deny" {
@@ -213,7 +217,9 @@ func TestInspect_PostToolUse_CleanOutput(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	if output["continue"] != true {
 		t.Error("Expected continue=true for clean output")
@@ -238,7 +244,9 @@ func TestInspect_UserPromptSubmit_InjectionDetected(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	hso := output["hookSpecificOutput"].(map[string]interface{})
 	if hso["permissionDecision"] != "ask" {
@@ -259,7 +267,9 @@ func TestInspect_UserPromptSubmit_NormalPrompt(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	hso := output["hookSpecificOutput"].(map[string]interface{})
 	if hso["permissionDecision"] != "allow" {
@@ -310,7 +320,9 @@ func TestInspect_DryRun(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	hso := output["hookSpecificOutput"].(map[string]interface{})
 	// In dry-run, deny becomes allow with explanation
@@ -326,10 +338,10 @@ func TestInspect_DryRun(t *testing.T) {
 
 func TestInspect_StrictConfig_DefaultDeny(t *testing.T) {
 	configPath := getTestdataPath("strict_config.yaml")
-	
+
 	// Command that doesn't match allow rule should be denied by default
 	input := `{"tool_name": "Bash", "tool_input": {"command": "rm file.txt"}}`
-	
+
 	stdout, _, err := runHooksy([]string{
 		"inspect", "--event", "PreToolUse", "--config", configPath,
 	}, input)
@@ -339,7 +351,9 @@ func TestInspect_StrictConfig_DefaultDeny(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	hso := output["hookSpecificOutput"].(map[string]interface{})
 	if hso["permissionDecision"] != "deny" {
@@ -349,10 +363,10 @@ func TestInspect_StrictConfig_DefaultDeny(t *testing.T) {
 
 func TestInspect_StrictConfig_AllowedCommand(t *testing.T) {
 	configPath := getTestdataPath("strict_config.yaml")
-	
+
 	// ls command should match the allow rule
 	input := `{"tool_name": "Bash", "tool_input": {"command": "ls -la"}}`
-	
+
 	stdout, _, err := runHooksy([]string{
 		"inspect", "--event", "PreToolUse", "--config", configPath,
 	}, input)
@@ -362,7 +376,9 @@ func TestInspect_StrictConfig_AllowedCommand(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	hso := output["hookSpecificOutput"].(map[string]interface{})
 	if hso["permissionDecision"] != "allow" {
@@ -426,7 +442,7 @@ func TestValidate_NonexistentConfig(t *testing.T) {
 
 func TestInit_CreatesConfig(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	cmd := exec.Command(binaryPath, "init")
 	cmd.Dir = tmpDir
 	output, err := cmd.CombinedOutput()
@@ -449,11 +465,15 @@ func TestInit_CreatesConfig(t *testing.T) {
 
 func TestInit_FailsIfExists(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create config first
 	configDir := filepath.Join(tmpDir, ".hooksy")
-	os.MkdirAll(configDir, 0755)
-	os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("existing"), 0644)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("existing"), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
 
 	cmd := exec.Command(binaryPath, "init")
 	cmd.Dir = tmpDir
@@ -607,7 +627,9 @@ func TestInspect_EmptyToolInput(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	// Should allow since no command to match
 	hso := output["hookSpecificOutput"].(map[string]interface{})
@@ -629,7 +651,9 @@ func TestInspect_UnknownTool(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	// Unknown tool should be allowed (no rules match)
 	hso := output["hookSpecificOutput"].(map[string]interface{})
@@ -652,7 +676,9 @@ func TestInspect_MCPTool(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	// MCP Bash should be allowed for safe command
 	if output["continue"] != true {
@@ -730,7 +756,9 @@ func TestInspect_Modify_PrependEcho(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	hso := output["hookSpecificOutput"].(map[string]interface{})
 	updatedInput := hso["updatedInput"].(map[string]interface{})
@@ -755,7 +783,9 @@ func TestInspect_Modify_ReplaceCommand(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	hso := output["hookSpecificOutput"].(map[string]interface{})
 	updatedInput := hso["updatedInput"].(map[string]interface{})
@@ -781,7 +811,9 @@ func TestInspect_Modify_NoMatchNoModification(t *testing.T) {
 	}
 
 	var output map[string]interface{}
-	json.Unmarshal([]byte(stdout), &output)
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
 
 	hso := output["hookSpecificOutput"].(map[string]interface{})
 

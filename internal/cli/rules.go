@@ -45,8 +45,8 @@ func init() {
 	rulesTestCmd.Flags().StringVar(&testRuleName, "rule", "", "Specific rule name to test (optional)")
 	rulesTestCmd.Flags().StringVarP(&testInputFile, "input", "i", "", "JSON file with sample input (required)")
 	rulesTestCmd.Flags().StringVarP(&testEventType, "event", "e", "", "Event type (required)")
-	rulesTestCmd.MarkFlagRequired("input")
-	rulesTestCmd.MarkFlagRequired("event")
+	_ = rulesTestCmd.MarkFlagRequired("input")
+	_ = rulesTestCmd.MarkFlagRequired("event")
 
 	rulesCmd.AddCommand(rulesListCmd)
 	rulesCmd.AddCommand(rulesTestCmd)
@@ -118,7 +118,7 @@ func runRulesList(cmd *cobra.Command, args []string) error {
 }
 
 func runRulesTest(cmd *cobra.Command, args []string) error {
-	logger.Init("debug", "")
+	_ = logger.Init("debug", "")
 
 	// Load config
 	loader, err := config.NewLoader(projectDir)
