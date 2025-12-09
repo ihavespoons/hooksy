@@ -1,0 +1,14 @@
+version: "1"
+
+settings:
+  log_level: info
+  default_decision: allow
+
+rules:
+  PreToolUse:
+    - name: bad-regex-rule
+      description: Rule with invalid regex
+      enabled: true
+      conditions:
+        tool_name: "[invalid regex"
+      decision: deny

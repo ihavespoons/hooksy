@@ -1,0 +1,8 @@
+{
+  "session_id": "test-session",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git push origin main"
+  },
+  "tool_use_id": "tool-123"
+}

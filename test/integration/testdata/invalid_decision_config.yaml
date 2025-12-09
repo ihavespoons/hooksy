@@ -1,0 +1,14 @@
+version: "1"
+
+settings:
+  log_level: info
+  default_decision: allow
+
+rules:
+  PreToolUse:
+    - name: bad-decision-rule
+      description: Rule with invalid decision
+      enabled: true
+      conditions:
+        tool_name: "^Bash$"
+      decision: invalid_decision

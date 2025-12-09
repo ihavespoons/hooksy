@@ -1,0 +1,118 @@
+version: 2
+
+project_name: hooksy
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: hooksy
+    main: ./cmd/hooksy
+    binary: hooksy
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version=v{{.Version}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+      - configs/default.yaml
+      - configs/strict.yaml
+      - configs/permissive.yaml
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: ihavespoons
+    name: hooksy
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} v{{.Version}}"
+  header: |
+    ## Hooksy v{{.Version}}
+
+    Claude Code Security Inspector - A security gateway for Claude Code hooks.
+  footer: |
+    ## Installation
+
+    ### macOS (Apple Silicon)
+    ```bash
+    curl -LO https://github.com/ihavespoons/hooksy/releases/download/v{{.Version}}/hooksy_{{.Version}}_darwin_arm64.tar.gz
+    tar -xzf hooksy_{{.Version}}_darwin_arm64.tar.gz
+    sudo mv hooksy /usr/local/bin/
+    ```
+
+    ### macOS (Intel)
+    ```bash
+    curl -LO https://github.com/ihavespoons/hooksy/releases/download/v{{.Version}}/hooksy_{{.Version}}_darwin_amd64.tar.gz
+    tar -xzf hooksy_{{.Version}}_darwin_amd64.tar.gz
+    sudo mv hooksy /usr/local/bin/
+    ```
+
+    ### Linux (amd64)
+    ```bash
+    curl -LO https://github.com/ihavespoons/hooksy/releases/download/v{{.Version}}/hooksy_{{.Version}}_linux_amd64.tar.gz
+    tar -xzf hooksy_{{.Version}}_linux_amd64.tar.gz
+    sudo mv hooksy /usr/local/bin/
+    ```
+
+    ### Go Install
+    ```bash
+    go install github.com/ihavespoons/hooksy/cmd/hooksy@v{{.Version}}
+    ```
+
+brews:
+  - name: hooksy
+    repository:
+      owner: ihavespoons
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    skip_upload: auto
+    directory: Formula
+    homepage: "https://github.com/ihavespoons/hooksy"
+    description: "Claude Code Security Inspector - A security gateway for Claude Code hooks"
+    license: "MIT"
+    test: |
+      system "#{bin}/hooksy", "--version"
+    install: |
+      bin.install "hooksy"

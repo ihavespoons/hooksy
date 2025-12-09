@@ -1,0 +1,82 @@
+version: "1"
+settings:
+    log_level: info
+    default_decision: allow
+rules:
+    PreToolUse:
+        - name: block-dangerous-commands
+          description: Block potentially dangerous shell commands
+          enabled: true
+          priority: 100
+          conditions:
+            tool_name: ^(Bash|mcp__.*__Bash)$
+            tool_input:
+                command:
+                    - pattern: rm\s+-rf\s+/
+                      message: Recursive deletion from root is blocked
+                    - pattern: ':()\{\s*:\|:&\s*\};:'
+                      message: Fork bombs are not allowed
+                    - pattern: curl.*\|.*sh
+                      message: Piping curl to shell is blocked
+                    - pattern: wget.*\|.*sh
+                      message: Piping wget to shell is blocked
+                    - pattern: '>\s*/dev/sd[a-z]'
+                      message: Direct disk writes are blocked
+          decision: deny
+        - name: block-sensitive-file-access
+          description: Prevent access to sensitive files
+          enabled: true
+          priority: 90
+          conditions:
+            tool_name: ^(Read|Write|Edit|mcp__.*__(Read|Write|Edit))$
+            tool_input:
+                file_path:
+                    - pattern: \.(env|pem|key|crt|p12|pfx)$
+                      message: Access to secrets/certificates blocked
+                    - pattern: /(\.ssh|\.gnupg|\.aws|\.kube)/
+                      message: Access to credential directories blocked
+                    - pattern: id_rsa|id_ed25519|id_ecdsa
+                      message: Access to SSH keys blocked
+          decision: deny
+    PostToolUse:
+        - name: detect-secret-leakage
+          description: Detect if secrets appear in command output
+          enabled: true
+          priority: 100
+          conditions:
+            tool_response:
+                - pattern: AKIA[0-9A-Z]{16}
+                  message: AWS access key detected in output
+                - pattern: '-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'
+                  message: Private key detected in output
+                - pattern: ghp_[a-zA-Z0-9]{36}
+                  message: GitHub token detected in output
+                - pattern: sk-[a-zA-Z0-9]{48}
+                  message: OpenAI API key detected in output
+          decision: block
+          system_message: Sensitive data was detected in the output. The response has been blocked.
+    UserPromptSubmit:
+        - name: detect-injection-attempts
+          description: Detect prompt injection attempts
+          enabled: false
+          priority: 100
+          conditions:
+            prompt:
+                - pattern: (?i)ignore (all |previous |prior )?instructions
+                  message: Potential prompt injection detected
+                - pattern: (?i)you are now|pretend (to be|you are)
+                  message: Role manipulation attempt detected
+          decision: ask
+allowlist:
+    - name: allow-project-configs
+      description: Allow access to common project configuration files
+      enabled: true
+      conditions:
+        tool_input:
+            file_path:
+                - pattern: package\.json$
+                - pattern: go\.(mod|sum)$
+                - pattern: Cargo\.toml$
+                - pattern: pyproject\.toml$
+                - pattern: \.hooksy/
+      decision: allow

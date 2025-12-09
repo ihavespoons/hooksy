@@ -1,0 +1,11 @@
+{
+  "session_id": "test-session",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo hello"
+  },
+  "tool_response": {
+    "output": "hello"
+  },
+  "tool_use_id": "tool-456"
+}

@@ -1,0 +1,49 @@
+version: "1"
+
+# Permissive security profile
+# Use this for development environments where you want minimal friction
+# Still blocks the most dangerous operations
+
+settings:
+  log_level: warn
+  default_decision: allow
+
+rules:
+  PreToolUse:
+    - name: block-catastrophic-commands
+      description: Block only the most catastrophic shell commands
+      enabled: true
+      priority: 100
+      conditions:
+        tool_name: "^(Bash|mcp__.*__Bash)$"
+        tool_input:
+          command:
+            - pattern: 'rm\s+-rf\s+/$'
+              message: Cannot delete root filesystem
+            - pattern: 'rm\s+-rf\s+/\*'
+              message: Cannot delete all root contents
+            - pattern: 'rm\s+-rf\s+~/?$'
+              message: Cannot delete home directory
+            - pattern: ':()\{\s*:\|:&\s*\};:'
+              message: Fork bombs are never allowed
+            - pattern: 'dd\s+.*of=/dev/[sh]d[a-z]$'
+              message: Cannot overwrite boot disk
+            - pattern: 'mkfs\..*/dev/[sh]d[a-z]1?$'
+              message: Cannot format system partitions
+      decision: deny
+
+  PostToolUse:
+    - name: detect-private-keys
+      description: Detect private key exposure only
+      enabled: true
+      priority: 100
+      conditions:
+        tool_response:
+          - pattern: '-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'
+            message: Private key detected in output
+      decision: block
+      system_message: Private key detected in output. Please review before proceeding.
+
+  UserPromptSubmit: []
+
+allowlist: []

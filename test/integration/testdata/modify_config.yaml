@@ -1,0 +1,58 @@
+version: "1"
+
+settings:
+  log_level: info
+  default_decision: allow
+
+rules:
+  PreToolUse:
+    - name: add-dry-run-to-git-push
+      description: Auto-add --dry-run to git push commands
+      enabled: true
+      priority: 100
+      conditions:
+        tool_name: "^Bash$"
+        tool_input:
+          command:
+            - pattern: 'git\s+push'
+              message: git push detected
+      action: modify
+      decision: allow
+      modifications:
+        tool_input:
+          command:
+            append: " --dry-run"
+
+    - name: prepend-echo-to-rm
+      description: Prepend echo to rm commands for safety
+      enabled: true
+      priority: 90
+      conditions:
+        tool_name: "^Bash$"
+        tool_input:
+          command:
+            - pattern: '^rm\s+'
+              message: rm command detected
+      action: modify
+      decision: allow
+      modifications:
+        tool_input:
+          command:
+            prepend: "echo "
+
+    - name: replace-dangerous-command
+      description: Replace dd command with safe alternative
+      enabled: true
+      priority: 80
+      conditions:
+        tool_name: "^Bash$"
+        tool_input:
+          command:
+            - pattern: '^dd\s+'
+              message: dd command detected
+      action: modify
+      decision: allow
+      modifications:
+        tool_input:
+          command:
+            replace: "echo 'dd command blocked for safety'"

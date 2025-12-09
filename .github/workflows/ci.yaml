@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.out
+          fail_ci_if_error: false
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          ext=""
+          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          go build -o hooksy-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/hooksy
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hooksy-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: hooksy-${{ matrix.goos }}-${{ matrix.goarch }}*
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Build hooksy
+        run: go build -o hooksy ./cmd/hooksy
+
+      - name: Test dangerous command detection
+        run: |
+          result=$(echo '{"tool_name": "Bash", "tool_input": {"command": "rm -rf /"}}' | ./hooksy inspect --event PreToolUse --config configs/default.yaml)
+          echo "$result" | grep -q '"permissionDecision":"deny"' || (echo "FAIL: Dangerous command should be blocked" && exit 1)
+          echo "PASS: Dangerous command blocked"
+
+      - name: Test safe command allowed
+        run: |
+          result=$(echo '{"tool_name": "Bash", "tool_input": {"command": "ls -la"}}' | ./hooksy inspect --event PreToolUse --config configs/default.yaml)
+          echo "$result" | grep -q '"permissionDecision":"allow"' || (echo "FAIL: Safe command should be allowed" && exit 1)
+          echo "PASS: Safe command allowed"
+
+      - name: Test secret detection
+        run: |
+          result=$(echo '{"tool_name": "Bash", "tool_response": {"output": "AKIAIOSFODNN7EXAMPLE"}}' | ./hooksy inspect --event PostToolUse --config configs/default.yaml)
+          echo "$result" | grep -q '"continue":false' || (echo "FAIL: Secret should be blocked" && exit 1)
+          echo "PASS: Secret blocked"
+
+      - name: Validate configs
+        run: |
+          ./hooksy validate --config configs/default.yaml
+          ./hooksy validate --config configs/strict.yaml
+          ./hooksy validate --config configs/permissive.yaml

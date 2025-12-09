@@ -1,0 +1,19 @@
+version: "1"
+
+settings:
+  log_level: warn
+  default_decision: deny
+
+rules:
+  PreToolUse:
+    - name: allow-ls-only
+      description: Only allow ls command
+      enabled: true
+      priority: 100
+      conditions:
+        tool_name: "^Bash$"
+        tool_input:
+          command:
+            - pattern: '^ls'
+              message: ls command allowed
+      decision: allow

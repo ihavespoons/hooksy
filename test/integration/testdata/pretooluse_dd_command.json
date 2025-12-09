@@ -1,0 +1,8 @@
+{
+  "session_id": "test-session",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "dd if=/dev/zero of=/dev/sda"
+  },
+  "tool_use_id": "tool-789"
+}

@@ -1,0 +1,8 @@
+{
+  "session_id": "test-session",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/user/.ssh/id_rsa"
+  },
+  "tool_use_id": "tool-789"
+}

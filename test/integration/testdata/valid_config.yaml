@@ -1,0 +1,66 @@
+version: "1"
+
+settings:
+  log_level: info
+  default_decision: allow
+
+rules:
+  PreToolUse:
+    - name: block-rm-rf
+      description: Block rm -rf /
+      enabled: true
+      priority: 100
+      conditions:
+        tool_name: "^Bash$"
+        tool_input:
+          command:
+            - pattern: 'rm\s+-rf\s+/'
+              message: Recursive deletion blocked
+      decision: deny
+
+    - name: block-curl-pipe
+      description: Block curl pipe to shell
+      enabled: true
+      priority: 90
+      conditions:
+        tool_name: "^Bash$"
+        tool_input:
+          command:
+            - pattern: 'curl.*\|.*sh'
+              message: Curl pipe to shell blocked
+      decision: deny
+
+    - name: block-sensitive-files
+      description: Block access to sensitive files
+      enabled: true
+      priority: 80
+      conditions:
+        tool_name: "^Read$"
+        tool_input:
+          file_path:
+            - pattern: 'id_rsa|id_ed25519'
+              message: SSH key access blocked
+      decision: deny
+
+  PostToolUse:
+    - name: detect-aws-keys
+      description: Detect AWS keys in output
+      enabled: true
+      priority: 100
+      conditions:
+        tool_response:
+          - pattern: 'AKIA[0-9A-Z]{16}'
+            message: AWS key detected
+      decision: block
+      system_message: AWS credentials detected in output
+
+  UserPromptSubmit:
+    - name: detect-injection
+      description: Detect prompt injection
+      enabled: true
+      priority: 100
+      conditions:
+        prompt:
+          - pattern: '(?i)ignore.*instructions'
+            message: Injection attempt detected
+      decision: ask
