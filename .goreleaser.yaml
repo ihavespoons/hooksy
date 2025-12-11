@@ -39,6 +39,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
+      - LICENSE
       - configs/default.yaml
       - configs/strict.yaml
       - configs/permissive.yaml
@@ -110,7 +111,7 @@ brews:
     directory: Formula
     homepage: "https://github.com/ihavespoons/hooksy"
     description: "Claude Code Security Inspector - A security gateway for Claude Code hooks"
-    license: "MIT"
+    license: "Apache-2.0"
     test: |
       system "#{bin}/hooksy", "--version"
     install: |
