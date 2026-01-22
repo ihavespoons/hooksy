@@ -439,7 +439,7 @@ func TestCoalesce(t *testing.T) {
 	}
 }
 
-func TestConfigExists(t *testing.T) {
+func TestExists(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a file
@@ -448,12 +448,12 @@ func TestConfigExists(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !ConfigExists(existingFile) {
-		t.Error("ConfigExists should return true for existing file")
+	if !Exists(existingFile) {
+		t.Error("Exists should return true for existing file")
 	}
 
 	nonExistent := filepath.Join(tmpDir, "nonexistent.yaml")
-	if ConfigExists(nonExistent) {
-		t.Error("ConfigExists should return false for nonexistent file")
+	if Exists(nonExistent) {
+		t.Error("Exists should return false for nonexistent file")
 	}
 }

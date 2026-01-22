@@ -155,7 +155,7 @@ func (a *TranscriptAnalyzer) ParseTranscript(path string) ([]TranscriptMessage, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to open transcript: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var messages []TranscriptMessage
 	scanner := bufio.NewScanner(file)
@@ -183,7 +183,7 @@ func (a *TranscriptAnalyzer) ParseTranscript(path string) ([]TranscriptMessage, 
 
 		// Also store raw JSON for flexibility
 		var raw map[string]interface{}
-		json.Unmarshal(line, &raw)
+		_ = json.Unmarshal(line, &raw)
 		msg.Raw = raw
 
 		messages = append(messages, msg)
@@ -254,10 +254,7 @@ func (a *TranscriptAnalyzer) AnalyzeTranscript(path string) (*TranscriptAnalysis
 			}
 		}
 
-		// Also check raw type field for tool results
-		if msg.Type == "tool_result" {
-			// Tool results don't need special analysis here
-		}
+		// Tool results (msg.Type == "tool_result") don't need special analysis here
 	}
 
 	// Analyze all collected text for patterns

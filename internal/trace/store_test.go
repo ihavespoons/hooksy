@@ -18,7 +18,7 @@ func TestNewSQLiteStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Verify database file was created
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
@@ -32,7 +32,7 @@ func TestNewSQLiteStoreDefaultPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store with default path: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	homeDir, _ := os.UserHomeDir()
 	expectedDir := filepath.Join(homeDir, ".hooksy", "traces")
@@ -49,7 +49,7 @@ func TestSessionCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Create session
 	session, err := store.GetOrCreateSession("test-session-1", "/home/user/project", "/tmp/transcript.jsonl")
@@ -115,7 +115,7 @@ func TestEventCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Create session first
 	_, err = store.GetOrCreateSession("test-session-1", "/home/user/project", "")
@@ -179,7 +179,7 @@ func TestGetSessionEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	_, err = store.GetOrCreateSession("test-session-1", "/home/user/project", "")
 	if err != nil {
@@ -226,7 +226,7 @@ func TestToolUseIDCorrelation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	_, err = store.GetOrCreateSession("test-session-1", "/home/user/project", "")
 	if err != nil {
@@ -287,7 +287,7 @@ func TestCleanupOldSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Create session and update last_seen to be old
 	_, err = store.GetOrCreateSession("old-session", "/home/user/project", "")
@@ -338,7 +338,7 @@ func TestCleanupExcessEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	_, err = store.GetOrCreateSession("test-session-1", "/home/user/project", "")
 	if err != nil {
@@ -387,7 +387,7 @@ func TestMaybeRunCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	settings := config.TraceSettings{
 		Enabled:            true,
@@ -410,7 +410,7 @@ func TestConcurrentAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	_, err = store.GetOrCreateSession("test-session-1", "/home/user/project", "")
 	if err != nil {
@@ -458,7 +458,7 @@ func TestEventWithNullFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	_, err = store.GetOrCreateSession("test-session-1", "/home/user/project", "")
 	if err != nil {

@@ -21,7 +21,7 @@ func setupTestAnalyzer(t *testing.T, rules []config.SequenceRule) (*Analyzer, *S
 	analyzer := NewAnalyzer(store, rules)
 
 	return analyzer, store, func() {
-		store.Close()
+		_ = store.Close()
 	}
 }
 
@@ -352,7 +352,7 @@ func TestAnalyzerBlockDecision(t *testing.T) {
 	defer cleanup()
 
 	sessionID := "test-session"
-	store.GetOrCreateSession(sessionID, "/home/user", "")
+	_, _ = store.GetOrCreateSession(sessionID, "/home/user", "")
 
 	event := &Event{
 		SessionID: sessionID,

@@ -95,7 +95,7 @@ func runInspect(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			logger.Debug().Err(err).Msg("Failed to initialize trace store, continuing without tracing")
 		} else {
-			defer store.Close()
+			defer func() { _ = store.Close() }()
 		}
 	}
 

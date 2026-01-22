@@ -20,7 +20,7 @@ func setupIntentChecker(t *testing.T) (*IntentChecker, *SQLiteStore, func()) {
 	checker := NewIntentChecker(store)
 
 	return checker, store, func() {
-		store.Close()
+		_ = store.Close()
 	}
 }
 
@@ -29,7 +29,7 @@ func TestIntentCheckerNoMismatch(t *testing.T) {
 	defer cleanup()
 
 	sessionID := "test-session"
-	store.GetOrCreateSession(sessionID, "/home/user", "")
+	_, _ = store.GetOrCreateSession(sessionID, "/home/user", "")
 
 	// Store PreToolUse event
 	preEvent := &Event{
@@ -42,7 +42,7 @@ func TestIntentCheckerNoMismatch(t *testing.T) {
 		},
 		Timestamp: time.Now().Add(-time.Second),
 	}
-	store.StoreEvent(preEvent)
+	_ = store.StoreEvent(preEvent)
 
 	// PostToolUse with same details - no mismatch
 	postEvent := &Event{
@@ -70,7 +70,7 @@ func TestIntentCheckerToolNameMismatch(t *testing.T) {
 	defer cleanup()
 
 	sessionID := "test-session"
-	store.GetOrCreateSession(sessionID, "/home/user", "")
+	_, _ = store.GetOrCreateSession(sessionID, "/home/user", "")
 
 	// Store PreToolUse with one tool name
 	preEvent := &Event{
@@ -83,7 +83,7 @@ func TestIntentCheckerToolNameMismatch(t *testing.T) {
 		},
 		Timestamp: time.Now().Add(-time.Second),
 	}
-	store.StoreEvent(preEvent)
+	_ = store.StoreEvent(preEvent)
 
 	// PostToolUse with different tool name (suspicious)
 	postEvent := &Event{
@@ -116,7 +116,7 @@ func TestIntentCheckerFileMismatch(t *testing.T) {
 	defer cleanup()
 
 	sessionID := "test-session"
-	store.GetOrCreateSession(sessionID, "/home/user", "")
+	_, _ = store.GetOrCreateSession(sessionID, "/home/user", "")
 
 	// Store PreToolUse for one file
 	preEvent := &Event{
@@ -129,7 +129,7 @@ func TestIntentCheckerFileMismatch(t *testing.T) {
 		},
 		Timestamp: time.Now().Add(-time.Second),
 	}
-	store.StoreEvent(preEvent)
+	_ = store.StoreEvent(preEvent)
 
 	// PostToolUse shows different file was accessed
 	postEvent := &Event{
@@ -161,7 +161,7 @@ func TestIntentCheckerCommandMismatch(t *testing.T) {
 	defer cleanup()
 
 	sessionID := "test-session"
-	store.GetOrCreateSession(sessionID, "/home/user", "")
+	_, _ = store.GetOrCreateSession(sessionID, "/home/user", "")
 
 	// Store PreToolUse for one command
 	preEvent := &Event{
@@ -174,7 +174,7 @@ func TestIntentCheckerCommandMismatch(t *testing.T) {
 		},
 		Timestamp: time.Now().Add(-time.Second),
 	}
-	store.StoreEvent(preEvent)
+	_ = store.StoreEvent(preEvent)
 
 	// PostToolUse shows different command executed
 	postEvent := &Event{
@@ -206,7 +206,7 @@ func TestIntentCheckerSuspiciousOutput(t *testing.T) {
 	defer cleanup()
 
 	sessionID := "test-session"
-	store.GetOrCreateSession(sessionID, "/home/user", "")
+	_, _ = store.GetOrCreateSession(sessionID, "/home/user", "")
 
 	// Store PreToolUse
 	preEvent := &Event{
@@ -219,7 +219,7 @@ func TestIntentCheckerSuspiciousOutput(t *testing.T) {
 		},
 		Timestamp: time.Now().Add(-time.Second),
 	}
-	store.StoreEvent(preEvent)
+	_ = store.StoreEvent(preEvent)
 
 	// PostToolUse with suspicious sandbox detection output
 	postEvent := &Event{
@@ -293,7 +293,7 @@ func TestIntentCheckerNoPreEvent(t *testing.T) {
 	defer cleanup()
 
 	sessionID := "test-session"
-	store.GetOrCreateSession(sessionID, "/home/user", "")
+	_, _ = store.GetOrCreateSession(sessionID, "/home/user", "")
 
 	// PostToolUse without corresponding PreToolUse
 	event := &Event{

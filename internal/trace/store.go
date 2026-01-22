@@ -13,7 +13,8 @@ import (
 	"github.com/ihavespoons/hooksy/internal/config"
 	"github.com/ihavespoons/hooksy/internal/hooks"
 	"github.com/ihavespoons/hooksy/internal/logger"
-	_ "modernc.org/sqlite"
+
+	_ "modernc.org/sqlite" // SQLite driver for database/sql
 )
 
 // SessionStore defines the interface for session/event persistence
@@ -74,7 +75,7 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	}
 
 	if err := store.initSchema(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
@@ -217,7 +218,7 @@ func (s *SQLiteStore) DeleteSession(sessionID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Delete events first (foreign key)
 	_, err = tx.Exec("DELETE FROM events WHERE session_id = ?", sessionID)
@@ -246,7 +247,7 @@ func (s *SQLiteStore) ListSessions() ([]*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var sessions []*Session
 	for rows.Next() {
@@ -327,7 +328,7 @@ func (s *SQLiteStore) GetSessionEvents(sessionID string, since time.Time) ([]*Ev
 	if err != nil {
 		return nil, fmt.Errorf("failed to get events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return s.scanEvents(rows)
 }
@@ -395,7 +396,7 @@ func (s *SQLiteStore) GetRecentEvents(sessionID string, limit int) ([]*Event, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recent events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	events, err := s.scanEvents(rows)
 	if err != nil {

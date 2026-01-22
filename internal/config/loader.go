@@ -168,8 +168,8 @@ func (l *Loader) ProjectConfigPath() string {
 	return l.projectPath
 }
 
-// ConfigExists checks if a config file exists at the given path
-func ConfigExists(path string) bool {
+// Exists checks if a config file exists at the given path
+func Exists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }

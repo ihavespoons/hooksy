@@ -128,7 +128,7 @@ func runTraceList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	sessions, err := store.ListSessions()
 	if err != nil {
@@ -189,7 +189,7 @@ func runTraceShow(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Get session info
 	session, err := store.GetSession(sessionID)
@@ -277,7 +277,7 @@ func runTraceClear(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	sessions, err := store.ListSessions()
 	if err != nil {
