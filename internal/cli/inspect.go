@@ -10,6 +10,7 @@ import (
 	"github.com/ihavespoons/hooksy/internal/engine"
 	"github.com/ihavespoons/hooksy/internal/hooks"
 	"github.com/ihavespoons/hooksy/internal/logger"
+	"github.com/ihavespoons/hooksy/internal/trace"
 	"github.com/spf13/cobra"
 )
 
@@ -86,8 +87,20 @@ func runInspect(cmd *cobra.Command, args []string) error {
 		RawJSON("input", inputJSON).
 		Msg("Received hook input")
 
+	// Initialize trace store if tracing is enabled
+	var store trace.SessionStore
+	if cfg.Settings.Trace.Enabled {
+		var err error
+		store, err = trace.NewSQLiteStore(cfg.Settings.Trace.StoragePath)
+		if err != nil {
+			logger.Debug().Err(err).Msg("Failed to initialize trace store, continuing without tracing")
+		} else {
+			defer store.Close()
+		}
+	}
+
 	// Run inspection
-	eng := engine.NewEngine(cfg)
+	eng := engine.NewEngineWithTracing(cfg, store)
 	output, err := eng.Inspect(event, inputJSON)
 	if err != nil {
 		logger.Error().Err(err).Msg("Inspection failed")

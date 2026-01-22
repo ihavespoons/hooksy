@@ -3,16 +3,20 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/ihavespoons/hooksy/internal/config"
 	"github.com/ihavespoons/hooksy/internal/hooks"
 	"github.com/ihavespoons/hooksy/internal/logger"
+	"github.com/ihavespoons/hooksy/internal/trace"
 )
 
 // Engine is the main inspection engine
 type Engine struct {
 	cfg       *config.Config
 	evaluator *Evaluator
+	store     trace.SessionStore
+	analyzer  *trace.Analyzer
 }
 
 // NewEngine creates a new inspection engine
@@ -20,6 +24,27 @@ func NewEngine(cfg *config.Config) *Engine {
 	return &Engine{
 		cfg:       cfg,
 		evaluator: NewEvaluator(),
+	}
+}
+
+// NewEngineWithTracing creates a new inspection engine with tracing enabled
+func NewEngineWithTracing(cfg *config.Config, store trace.SessionStore) *Engine {
+	e := &Engine{
+		cfg:       cfg,
+		evaluator: NewEvaluator(),
+		store:     store,
+	}
+	if store != nil && len(cfg.SequenceRules) > 0 {
+		e.analyzer = trace.NewAnalyzer(store, cfg.SequenceRules)
+	}
+	return e
+}
+
+// SetStore sets the session store for tracing (can be used to enable tracing after engine creation)
+func (e *Engine) SetStore(store trace.SessionStore) {
+	e.store = store
+	if store != nil && len(e.cfg.SequenceRules) > 0 {
+		e.analyzer = trace.NewAnalyzer(store, e.cfg.SequenceRules)
 	}
 }
 
@@ -38,6 +63,10 @@ func (e *Engine) Inspect(eventType hooks.EventType, inputJSON []byte) (*hooks.Ho
 		return e.inspectUserPromptSubmit(inputJSON)
 	case hooks.Stop, hooks.SubagentStop:
 		return e.inspectStop(eventType, inputJSON)
+	case hooks.SessionStart:
+		return e.inspectSessionStart(inputJSON)
+	case hooks.SessionEnd:
+		return e.inspectSessionEnd(inputJSON)
 	default:
 		// For unsupported events, allow by default
 		logger.Debug().
@@ -58,6 +87,14 @@ func (e *Engine) inspectPreToolUse(inputJSON []byte) (*hooks.HookOutput, error) 
 		Interface("input", input.ToolInput).
 		Msg("Evaluating PreToolUse")
 
+	// Ensure session exists for tracing
+	if e.store != nil {
+		_, err := e.store.GetOrCreateSession(input.SessionID, input.Cwd, input.TranscriptPath)
+		if err != nil {
+			logger.Debug().Err(err).Msg("Failed to get/create session for tracing")
+		}
+	}
+
 	rules := e.cfg.Rules.GetRulesForEvent(hooks.PreToolUse)
 	evaluation, err := e.evaluator.EvaluatePreToolUse(rules, e.cfg.Allowlist, &input)
 	if err != nil {
@@ -70,7 +107,43 @@ func (e *Engine) inspectPreToolUse(inputJSON []byte) (*hooks.HookOutput, error) 
 		evaluation.ModifiedInput = modifiedInput
 	}
 
-	return e.makeDecision(hooks.PreToolUse, evaluation)
+	// Make initial decision from rule evaluation
+	output, err := e.makeDecision(hooks.PreToolUse, evaluation)
+	if err != nil {
+		return nil, err
+	}
+
+	// Store event for tracing
+	decision := e.extractDecision(output)
+	ruleMatched := ""
+	if evaluation.Rule != nil {
+		ruleMatched = evaluation.Rule.Name
+	}
+
+	event := &trace.Event{
+		SessionID: input.SessionID,
+		ToolUseID: input.ToolUseID,
+		EventType: hooks.PreToolUse,
+		ToolName:  input.ToolName,
+		ToolInput: input.ToolInput,
+		Timestamp: time.Now(),
+		Decision:  decision,
+		RuleMatched: ruleMatched,
+	}
+
+	if e.store != nil {
+		if err := e.store.StoreEvent(event); err != nil {
+			logger.Debug().Err(err).Msg("Failed to store event for tracing")
+		}
+	}
+
+	// Run sequence and transcript analysis if analyzer is configured
+	if e.analyzer != nil {
+		sequenceOutput := e.analyzer.AnalyzeWithTranscript(input.SessionID, input.TranscriptPath, event)
+		output = e.combineOutputs(output, sequenceOutput, hooks.PreToolUse)
+	}
+
+	return output, nil
 }
 
 func (e *Engine) inspectPostToolUse(inputJSON []byte) (*hooks.HookOutput, error) {
@@ -83,13 +156,58 @@ func (e *Engine) inspectPostToolUse(inputJSON []byte) (*hooks.HookOutput, error)
 		Str("tool", input.ToolName).
 		Msg("Evaluating PostToolUse")
 
+	// Ensure session exists for tracing
+	if e.store != nil {
+		_, err := e.store.GetOrCreateSession(input.SessionID, input.Cwd, input.TranscriptPath)
+		if err != nil {
+			logger.Debug().Err(err).Msg("Failed to get/create session for tracing")
+		}
+	}
+
 	rules := e.cfg.Rules.GetRulesForEvent(hooks.PostToolUse)
 	evaluation, err := e.evaluator.EvaluatePostToolUse(rules, &input)
 	if err != nil {
 		return nil, err
 	}
 
-	return e.makeDecision(hooks.PostToolUse, evaluation)
+	// Make initial decision from rule evaluation
+	output, err := e.makeDecision(hooks.PostToolUse, evaluation)
+	if err != nil {
+		return nil, err
+	}
+
+	// Store event for tracing
+	decision := e.extractDecision(output)
+	ruleMatched := ""
+	if evaluation.Rule != nil {
+		ruleMatched = evaluation.Rule.Name
+	}
+
+	event := &trace.Event{
+		SessionID:    input.SessionID,
+		ToolUseID:    input.ToolUseID,
+		EventType:    hooks.PostToolUse,
+		ToolName:     input.ToolName,
+		ToolInput:    input.ToolInput,
+		ToolResponse: input.ToolResponse,
+		Timestamp:    time.Now(),
+		Decision:     decision,
+		RuleMatched:  ruleMatched,
+	}
+
+	if e.store != nil {
+		if err := e.store.StoreEvent(event); err != nil {
+			logger.Debug().Err(err).Msg("Failed to store event for tracing")
+		}
+	}
+
+	// Run sequence and transcript analysis if analyzer is configured
+	if e.analyzer != nil {
+		sequenceOutput := e.analyzer.AnalyzeWithTranscript(input.SessionID, input.TranscriptPath, event)
+		output = e.combineOutputs(output, sequenceOutput, hooks.PostToolUse)
+	}
+
+	return output, nil
 }
 
 func (e *Engine) inspectUserPromptSubmit(inputJSON []byte) (*hooks.HookOutput, error) {
@@ -236,4 +354,102 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+func (e *Engine) inspectSessionStart(inputJSON []byte) (*hooks.HookOutput, error) {
+	var input hooks.SessionStartInput
+	if err := json.Unmarshal(inputJSON, &input); err != nil {
+		return nil, fmt.Errorf("failed to parse SessionStart input: %w", err)
+	}
+
+	logger.Debug().
+		Str("session_id", input.SessionID).
+		Str("source", input.Source).
+		Msg("Session starting")
+
+	// Initialize session for tracing
+	if e.store != nil {
+		_, err := e.store.GetOrCreateSession(input.SessionID, input.Cwd, input.TranscriptPath)
+		if err != nil {
+			logger.Debug().Err(err).Msg("Failed to create session for tracing")
+		}
+
+		// Probabilistically run cleanup
+		trace.MaybeRunCleanup(e.store, e.cfg.Settings.Trace)
+	}
+
+	return hooks.NewAllowOutput(hooks.SessionStart, "Session started"), nil
+}
+
+func (e *Engine) inspectSessionEnd(inputJSON []byte) (*hooks.HookOutput, error) {
+	var input hooks.SessionEndInput
+	if err := json.Unmarshal(inputJSON, &input); err != nil {
+		return nil, fmt.Errorf("failed to parse SessionEnd input: %w", err)
+	}
+
+	logger.Debug().
+		Str("session_id", input.SessionID).
+		Str("reason", input.Reason).
+		Msg("Session ending")
+
+	// Clean up excess events for this session
+	if e.store != nil {
+		maxEvents := e.cfg.Settings.Trace.MaxEventsPerSession
+		if maxEvents <= 0 {
+			maxEvents = 1000
+		}
+		_, err := e.store.CleanupExcessEvents(input.SessionID, maxEvents)
+		if err != nil {
+			logger.Debug().Err(err).Msg("Failed to cleanup excess events")
+		}
+	}
+
+	return hooks.NewAllowOutput(hooks.SessionEnd, "Session ended"), nil
+}
+
+// extractDecision extracts the decision string from a HookOutput
+func (e *Engine) extractDecision(output *hooks.HookOutput) string {
+	if output == nil {
+		return "allow"
+	}
+	if !output.Continue {
+		return "block"
+	}
+	if output.HookSpecificOutput != nil {
+		return string(output.HookSpecificOutput.PermissionDecision)
+	}
+	return "allow"
+}
+
+// combineOutputs combines the rule-based output with sequence analysis output
+// Most restrictive decision wins: block > deny > ask > allow
+func (e *Engine) combineOutputs(ruleOutput, sequenceOutput *hooks.HookOutput, eventType hooks.EventType) *hooks.HookOutput {
+	if sequenceOutput == nil {
+		return ruleOutput
+	}
+
+	ruleDecision := e.extractDecision(ruleOutput)
+	sequenceDecision := e.extractDecision(sequenceOutput)
+
+	// Decision priority order (most restrictive first)
+	priority := map[string]int{
+		"block": 4,
+		"deny":  3,
+		"ask":   2,
+		"allow": 1,
+	}
+
+	rulePriority := priority[ruleDecision]
+	sequencePriority := priority[sequenceDecision]
+
+	// If sequence analysis has a more restrictive decision, use it
+	if sequencePriority > rulePriority {
+		logger.Info().
+			Str("rule_decision", ruleDecision).
+			Str("sequence_decision", sequenceDecision).
+			Msg("Sequence analysis triggered more restrictive decision")
+		return sequenceOutput
+	}
+
+	return ruleOutput
 }

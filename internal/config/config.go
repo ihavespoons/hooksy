@@ -4,17 +4,68 @@ import "github.com/ihavespoons/hooksy/internal/hooks"
 
 // Config represents the complete hooksy configuration
 type Config struct {
-	Version   string   `yaml:"version"`
-	Settings  Settings `yaml:"settings"`
-	Rules     Rules    `yaml:"rules"`
-	Allowlist []Rule   `yaml:"allowlist,omitempty"`
+	Version       string         `yaml:"version"`
+	Settings      Settings       `yaml:"settings"`
+	Rules         Rules          `yaml:"rules"`
+	Allowlist     []Rule         `yaml:"allowlist,omitempty"`
+	SequenceRules []SequenceRule `yaml:"sequence_rules,omitempty"`
 }
 
 // Settings contains global configuration settings
 type Settings struct {
-	LogLevel        string `yaml:"log_level"`
-	LogFile         string `yaml:"log_file,omitempty"`
-	DefaultDecision string `yaml:"default_decision"`
+	LogLevel        string        `yaml:"log_level"`
+	LogFile         string        `yaml:"log_file,omitempty"`
+	DefaultDecision string        `yaml:"default_decision"`
+	Trace           TraceSettings `yaml:"trace,omitempty"`
+}
+
+// TraceSettings configures the trace analysis feature
+type TraceSettings struct {
+	Enabled             bool    `yaml:"enabled"`
+	StoragePath         string  `yaml:"storage_path,omitempty"`
+	SessionTTL          string  `yaml:"session_ttl,omitempty"`
+	MaxEventsPerSession int     `yaml:"max_events_per_session,omitempty"`
+	CleanupProbability  float64 `yaml:"cleanup_probability,omitempty"`
+}
+
+// DefaultTraceSettings returns the default trace settings
+func DefaultTraceSettings() TraceSettings {
+	return TraceSettings{
+		Enabled:             false,
+		StoragePath:         "",
+		SessionTTL:          "24h",
+		MaxEventsPerSession: 1000,
+		CleanupProbability:  0.1,
+	}
+}
+
+// SequenceRule defines a multi-event pattern to detect
+type SequenceRule struct {
+	Name        string          `yaml:"name"`
+	Description string          `yaml:"description,omitempty"`
+	Enabled     bool            `yaml:"enabled"`
+	Severity    string          `yaml:"severity,omitempty"`
+	Window      string          `yaml:"window,omitempty"`
+	Events      []SequenceEvent `yaml:"events"`
+	Decision    string          `yaml:"decision"`
+	Message     string          `yaml:"message,omitempty"`
+}
+
+// SequenceEvent defines a single event in a sequence pattern
+type SequenceEvent struct {
+	EventType        hooks.EventType   `yaml:"event_type"`
+	ToolName         string            `yaml:"tool_name,omitempty"`
+	ToolInput        map[string]string `yaml:"tool_input,omitempty"`
+	Label            string            `yaml:"label,omitempty"`
+	After            string            `yaml:"after,omitempty"`
+	Count            string            `yaml:"count,omitempty"`
+	ToolUseIDMatches string            `yaml:"tool_use_id_matches,omitempty"`
+	IntentCheck      *IntentCheck      `yaml:"intent_check,omitempty"`
+}
+
+// IntentCheck configures intent vs action comparison
+type IntentCheck struct {
+	Enabled bool `yaml:"enabled"`
 }
 
 // Rules contains rules organized by hook event type
@@ -99,6 +150,7 @@ func DefaultConfig() *Config {
 		Settings: Settings{
 			LogLevel:        "info",
 			DefaultDecision: "allow",
+			Trace:           DefaultTraceSettings(),
 		},
 		Rules: Rules{},
 	}
