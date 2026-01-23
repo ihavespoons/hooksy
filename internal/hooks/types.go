@@ -3,6 +3,7 @@ package hooks
 // EventType represents the type of Claude Code hook event
 type EventType string
 
+// Event types for Claude Code hooks
 const (
 	PreToolUse        EventType = "PreToolUse"
 	PostToolUse       EventType = "PostToolUse"
@@ -83,6 +84,7 @@ type PreCompactInput struct {
 // PermissionDecision represents the decision type for PreToolUse
 type PermissionDecision string
 
+// Permission decision values for PreToolUse hooks
 const (
 	PermissionAllow PermissionDecision = "allow"
 	PermissionDeny  PermissionDecision = "deny"
@@ -92,6 +94,7 @@ const (
 // Decision represents a blocking decision
 type Decision string
 
+// Blocking decision values
 const (
 	DecisionBlock Decision = "block"
 )
@@ -171,5 +174,20 @@ func NewModifyOutput(eventName EventType, reason string, updatedInput map[string
 			PermissionDecisionReason: reason,
 			UpdatedInput:             updatedInput,
 		},
+	}
+}
+
+// NewStopAllowOutput creates an allow output for Stop events (no hookSpecificOutput)
+func NewStopAllowOutput() *HookOutput {
+	return &HookOutput{
+		Continue: true,
+	}
+}
+
+// NewStopContinueOutput creates an output for Stop events that continues processing
+func NewStopContinueOutput(stopReason string) *HookOutput {
+	return &HookOutput{
+		Continue:   true,
+		StopReason: stopReason,
 	}
 }

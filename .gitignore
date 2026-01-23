@@ -7,6 +7,7 @@ hooksy.exe
 *.dylib
 
 # Build output
+/bin/
 /build/
 /dist/
 

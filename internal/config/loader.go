@@ -111,6 +111,13 @@ func mergeConfigs(base, override *Config) *Config {
 		result.Version = base.Version
 	}
 
+	// Merge LLM config - override takes precedence if set
+	if override.LLM != nil {
+		result.LLM = override.LLM
+	} else {
+		result.LLM = base.LLM
+	}
+
 	return result
 }
 
@@ -168,8 +175,8 @@ func (l *Loader) ProjectConfigPath() string {
 	return l.projectPath
 }
 
-// ConfigExists checks if a config file exists at the given path
-func ConfigExists(path string) bool {
+// Exists checks if a config file exists at the given path
+func Exists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }

@@ -40,7 +40,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		globalPath := loader.GlobalConfigPath()
 		projectPath := loader.ProjectConfigPath()
 
-		if config.ConfigExists(globalPath) {
+		if config.Exists(globalPath) {
 			fmt.Printf("Validating global config: %s\n", globalPath)
 			if err := validateConfigFile(loader, globalPath); err != nil {
 				return err
@@ -48,7 +48,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 			fmt.Println("  Valid!")
 		}
 
-		if config.ConfigExists(projectPath) {
+		if config.Exists(projectPath) {
 			fmt.Printf("Validating project config: %s\n", projectPath)
 			if err := validateConfigFile(loader, projectPath); err != nil {
 				return err
@@ -56,7 +56,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 			fmt.Println("  Valid!")
 		}
 
-		if !config.ConfigExists(globalPath) && !config.ConfigExists(projectPath) {
+		if !config.Exists(globalPath) && !config.Exists(projectPath) {
 			fmt.Println("No configuration files found.")
 			fmt.Println("Run 'hooksy init' to create one.")
 			return nil

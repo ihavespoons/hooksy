@@ -267,8 +267,9 @@ func TestEngine_Inspect_Stop(t *testing.T) {
 	if !output.Continue {
 		t.Error("Stop event should allow continuation")
 	}
-	if output.HookSpecificOutput.PermissionDecision != hooks.PermissionAllow {
-		t.Error("Stop event should return allow")
+	// Stop events should NOT have hookSpecificOutput per Claude Code schema
+	if output.HookSpecificOutput != nil {
+		t.Error("Stop event should not have hookSpecificOutput")
 	}
 }
 
@@ -296,6 +297,7 @@ func TestEngine_Inspect_UnsupportedEvent(t *testing.T) {
 	e := NewEngine(cfg)
 
 	// SessionStart is not fully implemented, should default to allow
+	// Unsupported events should NOT have hookSpecificOutput per Claude Code schema
 	input := map[string]interface{}{"session_id": "test"}
 	inputJSON, _ := json.Marshal(input)
 
@@ -307,8 +309,9 @@ func TestEngine_Inspect_UnsupportedEvent(t *testing.T) {
 	if !output.Continue {
 		t.Error("Unsupported event should allow continuation")
 	}
-	if output.HookSpecificOutput.PermissionDecision != hooks.PermissionAllow {
-		t.Error("Unsupported event should return allow")
+	// Unsupported events should NOT have hookSpecificOutput (only PreToolUse, UserPromptSubmit, PostToolUse support it)
+	if output.HookSpecificOutput != nil {
+		t.Error("Unsupported event should not have hookSpecificOutput")
 	}
 }
 

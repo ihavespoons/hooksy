@@ -30,15 +30,18 @@ func init() {
 	rootCmd.AddCommand(generateCmd)
 }
 
+// HookConfig represents the Claude Code hooks configuration structure
 type HookConfig struct {
 	Hooks map[string][]EventConfig `json:"hooks"`
 }
 
+// EventConfig represents configuration for a specific event type
 type EventConfig struct {
 	Matcher string        `json:"matcher,omitempty"`
 	Hooks   []HookCommand `json:"hooks"`
 }
 
+// HookCommand represents a single hook command to execute
 type HookCommand struct {
 	Type    string `json:"type"`
 	Command string `json:"command"`

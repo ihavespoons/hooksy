@@ -1,9 +1,97 @@
 version: "1"
 settings:
-    log_level: info
+    log_level: debug
+    log_file: /tmp/hooksy-trace.log
     default_decision: allow
+
+    # Execution trace analysis settings
+    trace:
+        enabled: true
+        storage_path: ""  # Empty = ~/.hooksy/traces/sessions.db
+        session_ttl: 24h
+        max_events_per_session: 1000
+        cleanup_probability: 0.1
+
+# LLM-based analysis configuration
+llm:
+    enabled: true
+    mode: hybrid  # sync for pre-events, async for post/stop
+
+    # Provider fallback order - CLI first (free), then paid APIs
+    provider_order:
+        - claude_cli
+        - anthropic
+
+    providers:
+        claude_cli:
+            enabled: true
+            binary_path: /home/beng/.local/share/mise/installs/node/25.2.1/bin/claude
+            model: ""        # Use CLI default
+            max_tokens: 1024
+
+        anthropic:
+            enabled: true
+            # Uses ANTHROPIC_API_KEY env var
+            model: claude-sonnet-4-20250514
+            max_tokens: 1024
+
+    analysis:
+        event_types:
+            - PreToolUse
+            - PostToolUse
+            - Stop
+        min_confidence: 0.7
+
+        triggers:
+            # Analyze Bash commands that weren't caught by rules
+            - event_type: PreToolUse
+              conditions:
+                  tool_names: ["^Bash$"]
+                  no_rule_match: true
+              analysis_types: [contextual]
+              mode: sync
+
+            # Analyze stop events asynchronously
+            - event_type: Stop
+              conditions:
+                  always: true
+              analysis_types: [stop]
+              mode: async
+
+    cache:
+        enabled: true
+        max_entries: 500
+        ttl: 5m
+
+    rate_limit:
+        enabled: true
+        requests_per_min: 30
+        burst_size: 5
+
+    budget:
+        enabled: true
+        daily_limit_cents: 100
+        warn_at_percent: 80
+
+    timeouts:
+        cli: 60s
+        api: 15s
+
 rules:
     PreToolUse:
+        - name: protect-hooksy-config
+          description: Prevent agents from modifying hooksy configuration
+          enabled: true
+          priority: 200
+          conditions:
+            tool_name: ^(Write|Edit|NotebookEdit|mcp__.*__(Write|Edit))$
+            tool_input:
+                file_path:
+                    - pattern: \.hooksy/
+                      message: Modification of hooksy configuration is not allowed
+                    - pattern: hooksy.*\.ya?ml$
+                      message: Modification of hooksy configuration is not allowed
+          decision: deny
         - name: block-dangerous-commands
           description: Block potentially dangerous shell commands
           enabled: true
@@ -78,5 +166,4 @@ allowlist:
                 - pattern: go\.(mod|sum)$
                 - pattern: Cargo\.toml$
                 - pattern: pyproject\.toml$
-                - pattern: \.hooksy/
       decision: allow

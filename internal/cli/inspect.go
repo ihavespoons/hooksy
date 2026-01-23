@@ -9,7 +9,10 @@ import (
 	"github.com/ihavespoons/hooksy/internal/config"
 	"github.com/ihavespoons/hooksy/internal/engine"
 	"github.com/ihavespoons/hooksy/internal/hooks"
+	"github.com/ihavespoons/hooksy/internal/llm"
+	"github.com/ihavespoons/hooksy/internal/llm/providers"
 	"github.com/ihavespoons/hooksy/internal/logger"
+	"github.com/ihavespoons/hooksy/internal/trace"
 	"github.com/spf13/cobra"
 )
 
@@ -40,20 +43,13 @@ func init() {
 }
 
 func runInspect(cmd *cobra.Command, args []string) error {
-	// Initialize logging
-	if verbose {
-		_ = logger.Init("debug", "")
-	} else {
-		logger.InitQuiet()
-	}
-
 	// Validate event type
 	event := hooks.EventType(eventType)
 	if !isValidEventType(event) {
 		return fmt.Errorf("invalid event type: %s", eventType)
 	}
 
-	// Load configuration
+	// Load configuration first so we can use log settings
 	loader, err := config.NewLoader(projectDir)
 	if err != nil {
 		return fmt.Errorf("failed to create config loader: %w", err)
@@ -67,9 +63,19 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	}
 	if err != nil {
 		// If no config found, use defaults
-		logger.Debug().Msg("No config found, using defaults")
 		cfg = config.DefaultConfig()
 	}
+
+	// Initialize logging with config settings
+	if verbose {
+		_ = logger.Init("debug", cfg.Settings.LogFile)
+	} else if cfg.Settings.LogLevel != "" {
+		_ = logger.Init(cfg.Settings.LogLevel, cfg.Settings.LogFile)
+	} else {
+		logger.InitQuiet()
+	}
+
+	logger.Debug().Msg("Config loaded successfully")
 
 	// Read input from stdin
 	inputJSON, err := io.ReadAll(os.Stdin)
@@ -86,8 +92,34 @@ func runInspect(cmd *cobra.Command, args []string) error {
 		RawJSON("input", inputJSON).
 		Msg("Received hook input")
 
+	// Initialize trace store if tracing is enabled
+	var store trace.SessionStore
+	if cfg.Settings.Trace.Enabled {
+		var err error
+		store, err = trace.NewSQLiteStore(cfg.Settings.Trace.StoragePath)
+		if err != nil {
+			logger.Debug().Err(err).Msg("Failed to initialize trace store, continuing without tracing")
+		} else {
+			defer func() { _ = store.Close() }()
+		}
+	}
+
+	// Initialize LLM manager if enabled
+	var eng *engine.Engine
+	if cfg.LLM != nil && cfg.LLM.Enabled {
+		llmManager, err := llm.NewManager(cfg.LLM, providers.DefaultFactories())
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to create LLM manager, running without LLM")
+			eng = engine.NewEngineWithTracing(cfg, store)
+		} else {
+			eng = engine.NewEngineWithLLMAndTracing(cfg, llmManager, store)
+			logger.Debug().Msg("LLM analysis enabled")
+		}
+	} else {
+		eng = engine.NewEngineWithTracing(cfg, store)
+	}
+
 	// Run inspection
-	eng := engine.NewEngine(cfg)
 	output, err := eng.Inspect(event, inputJSON)
 	if err != nil {
 		logger.Error().Err(err).Msg("Inspection failed")
