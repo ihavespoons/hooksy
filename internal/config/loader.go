@@ -93,6 +93,7 @@ func mergeConfigs(base, override *Config) *Config {
 			LogLevel:        coalesce(override.Settings.LogLevel, base.Settings.LogLevel),
 			LogFile:         coalesce(override.Settings.LogFile, base.Settings.LogFile),
 			DefaultDecision: coalesce(override.Settings.DefaultDecision, base.Settings.DefaultDecision),
+			Trace:           mergeTraceSettings(base.Settings.Trace, override.Settings.Trace),
 		},
 		Rules: Rules{
 			PreToolUse:       mergeRules(base.Rules.PreToolUse, override.Rules.PreToolUse),
@@ -104,7 +105,8 @@ func mergeConfigs(base, override *Config) *Config {
 			SessionStart:     mergeRules(base.Rules.SessionStart, override.Rules.SessionStart),
 			SessionEnd:       mergeRules(base.Rules.SessionEnd, override.Rules.SessionEnd),
 		},
-		Allowlist: mergeRules(base.Allowlist, override.Allowlist),
+		Allowlist:     mergeRules(base.Allowlist, override.Allowlist),
+		SequenceRules: mergeSequenceRules(base.SequenceRules, override.SequenceRules),
 	}
 
 	if override.Version == "" {
@@ -116,6 +118,62 @@ func mergeConfigs(base, override *Config) *Config {
 		result.LLM = override.LLM
 	} else {
 		result.LLM = base.LLM
+	}
+
+	return result
+}
+
+// mergeTraceSettings merges trace settings, with override taking precedence for set values
+func mergeTraceSettings(base, override TraceSettings) TraceSettings {
+	result := base
+
+	// Override Enabled if explicitly set in override config
+	// Since we can't distinguish "not set" from "set to false" for bool,
+	// we check if any trace settings are configured in override
+	if override.Enabled || override.StoragePath != "" || override.SessionTTL != "" ||
+		override.MaxEventsPerSession != 0 || override.CleanupProbability != 0 {
+		result.Enabled = override.Enabled
+	}
+
+	if override.StoragePath != "" {
+		result.StoragePath = override.StoragePath
+	}
+	if override.SessionTTL != "" {
+		result.SessionTTL = override.SessionTTL
+	}
+	if override.MaxEventsPerSession != 0 {
+		result.MaxEventsPerSession = override.MaxEventsPerSession
+	}
+	if override.CleanupProbability != 0 {
+		result.CleanupProbability = override.CleanupProbability
+	}
+
+	return result
+}
+
+// mergeSequenceRules combines sequence rules from base and override
+// Rules with the same name are replaced, new rules are added
+func mergeSequenceRules(base, override []SequenceRule) []SequenceRule {
+	if len(override) == 0 {
+		return base
+	}
+	if len(base) == 0 {
+		return override
+	}
+
+	// Create a map for quick lookup
+	ruleMap := make(map[string]SequenceRule)
+	for _, r := range base {
+		ruleMap[r.Name] = r
+	}
+	for _, r := range override {
+		ruleMap[r.Name] = r
+	}
+
+	// Convert back to slice
+	result := make([]SequenceRule, 0, len(ruleMap))
+	for _, r := range ruleMap {
+		result = append(result, r)
 	}
 
 	return result
