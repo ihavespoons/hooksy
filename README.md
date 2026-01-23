@@ -4,11 +4,25 @@ A security inspection tool for Claude Code hooks. Hooksy intercepts Claude Code 
 
 ## Installation
 
-```bash
-# From source
-go install github.com/ihavespoons/hooksy/cmd/hooksy@latest
+### Homebrew (macOS/Linux)
 
-# Or build locally
+```bash
+brew install ihavespoons/tap/hooksy
+```
+
+### Go Install
+
+```bash
+go install github.com/ihavespoons/hooksy/cmd/hooksy@latest
+```
+
+### Download Binary
+
+Download pre-built binaries from the [releases page](https://github.com/ihavespoons/hooksy/releases).
+
+### Build from Source
+
+```bash
 git clone https://github.com/ihavespoons/hooksy.git
 cd hooksy
 make build
