@@ -468,3 +468,230 @@ func TestExists(t *testing.T) {
 		t.Error("Exists should return false for nonexistent file")
 	}
 }
+
+func TestMergeTraceSettings(t *testing.T) {
+	base := TraceSettings{
+		Enabled:             false,
+		StoragePath:         "/base/path",
+		SessionTTL:          "24h",
+		MaxEventsPerSession: 1000,
+		CleanupProbability:  0.1,
+	}
+
+	t.Run("override enabled", func(t *testing.T) {
+		override := TraceSettings{
+			Enabled: true,
+		}
+		result := mergeTraceSettings(base, override)
+		if !result.Enabled {
+			t.Error("Enabled should be true from override")
+		}
+		if result.StoragePath != "/base/path" {
+			t.Errorf("StoragePath should be preserved from base, got %q", result.StoragePath)
+		}
+	})
+
+	t.Run("override storage path", func(t *testing.T) {
+		override := TraceSettings{
+			StoragePath: "/override/path",
+		}
+		result := mergeTraceSettings(base, override)
+		if result.StoragePath != "/override/path" {
+			t.Errorf("StoragePath should be overridden, got %q", result.StoragePath)
+		}
+	})
+
+	t.Run("override all fields", func(t *testing.T) {
+		override := TraceSettings{
+			Enabled:             true,
+			StoragePath:         "/new/path",
+			SessionTTL:          "48h",
+			MaxEventsPerSession: 500,
+			CleanupProbability:  0.2,
+		}
+		result := mergeTraceSettings(base, override)
+		if !result.Enabled {
+			t.Error("Enabled should be true")
+		}
+		if result.StoragePath != "/new/path" {
+			t.Errorf("StoragePath wrong, got %q", result.StoragePath)
+		}
+		if result.SessionTTL != "48h" {
+			t.Errorf("SessionTTL wrong, got %q", result.SessionTTL)
+		}
+		if result.MaxEventsPerSession != 500 {
+			t.Errorf("MaxEventsPerSession wrong, got %d", result.MaxEventsPerSession)
+		}
+		if result.CleanupProbability != 0.2 {
+			t.Errorf("CleanupProbability wrong, got %f", result.CleanupProbability)
+		}
+	})
+
+	t.Run("empty override preserves base", func(t *testing.T) {
+		override := TraceSettings{}
+		result := mergeTraceSettings(base, override)
+		if result.Enabled != base.Enabled {
+			t.Error("Enabled should be preserved from base")
+		}
+		if result.StoragePath != base.StoragePath {
+			t.Error("StoragePath should be preserved from base")
+		}
+		if result.SessionTTL != base.SessionTTL {
+			t.Error("SessionTTL should be preserved from base")
+		}
+	})
+}
+
+func TestMergeSequenceRules(t *testing.T) {
+	base := []SequenceRule{
+		{Name: "rule-a", Enabled: true, Decision: "allow"},
+		{Name: "rule-b", Enabled: true, Decision: "deny"},
+	}
+
+	t.Run("override replaces same-name rule", func(t *testing.T) {
+		override := []SequenceRule{
+			{Name: "rule-a", Enabled: false, Decision: "deny"},
+		}
+		result := mergeSequenceRules(base, override)
+		if len(result) != 2 {
+			t.Errorf("got %d rules, want 2", len(result))
+		}
+		// Find rule-a and check it was overridden
+		for _, r := range result {
+			if r.Name == "rule-a" {
+				if r.Enabled != false {
+					t.Error("rule-a should be disabled (overridden)")
+				}
+				if r.Decision != "deny" {
+					t.Error("rule-a should have decision=deny (overridden)")
+				}
+			}
+		}
+	})
+
+	t.Run("new rules are added", func(t *testing.T) {
+		override := []SequenceRule{
+			{Name: "rule-c", Enabled: true, Decision: "ask"},
+		}
+		result := mergeSequenceRules(base, override)
+		if len(result) != 3 {
+			t.Errorf("got %d rules, want 3", len(result))
+		}
+	})
+
+	t.Run("empty override returns base", func(t *testing.T) {
+		result := mergeSequenceRules(base, nil)
+		if len(result) != 2 {
+			t.Errorf("got %d rules, want 2", len(result))
+		}
+		result = mergeSequenceRules(base, []SequenceRule{})
+		if len(result) != 2 {
+			t.Errorf("got %d rules, want 2", len(result))
+		}
+	})
+
+	t.Run("empty base returns override", func(t *testing.T) {
+		override := []SequenceRule{{Name: "only-rule"}}
+		result := mergeSequenceRules(nil, override)
+		if len(result) != 1 {
+			t.Errorf("got %d rules, want 1", len(result))
+		}
+		result = mergeSequenceRules([]SequenceRule{}, override)
+		if len(result) != 1 {
+			t.Errorf("got %d rules, want 1", len(result))
+		}
+	})
+}
+
+func TestLoader_Load_TraceSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create project config with trace settings
+	projectDir := filepath.Join(tmpDir, "project", ".hooksy")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	projectConfig := `version: "1"
+settings:
+  trace:
+    enabled: true
+    storage_path: "/custom/path/traces.db"
+    session_ttl: "48h"
+    max_events_per_session: 500
+`
+	if err := os.WriteFile(filepath.Join(projectDir, "config.yaml"), []byte(projectConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader := &Loader{
+		globalPath:  filepath.Join(tmpDir, "global", ".hooksy", "config.yaml"),
+		projectPath: filepath.Join(projectDir, "config.yaml"),
+	}
+
+	cfg, err := loader.Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if !cfg.Settings.Trace.Enabled {
+		t.Error("Trace.Enabled should be true")
+	}
+	if cfg.Settings.Trace.StoragePath != "/custom/path/traces.db" {
+		t.Errorf("Trace.StoragePath wrong, got %q", cfg.Settings.Trace.StoragePath)
+	}
+	if cfg.Settings.Trace.SessionTTL != "48h" {
+		t.Errorf("Trace.SessionTTL wrong, got %q", cfg.Settings.Trace.SessionTTL)
+	}
+	if cfg.Settings.Trace.MaxEventsPerSession != 500 {
+		t.Errorf("Trace.MaxEventsPerSession wrong, got %d", cfg.Settings.Trace.MaxEventsPerSession)
+	}
+	// CleanupProbability should come from default since not specified
+	if cfg.Settings.Trace.CleanupProbability != 0.1 {
+		t.Errorf("Trace.CleanupProbability should be default 0.1, got %f", cfg.Settings.Trace.CleanupProbability)
+	}
+}
+
+func TestLoader_Load_SequenceRules(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create project config with sequence rules
+	projectDir := filepath.Join(tmpDir, "project", ".hooksy")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	projectConfig := `version: "1"
+sequence_rules:
+  - name: test-sequence
+    enabled: true
+    window: "5m"
+    decision: deny
+    events:
+      - event_type: PreToolUse
+        tool_name: "^Bash$"
+`
+	if err := os.WriteFile(filepath.Join(projectDir, "config.yaml"), []byte(projectConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader := &Loader{
+		globalPath:  filepath.Join(tmpDir, "global", ".hooksy", "config.yaml"),
+		projectPath: filepath.Join(projectDir, "config.yaml"),
+	}
+
+	cfg, err := loader.Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if len(cfg.SequenceRules) != 1 {
+		t.Errorf("got %d sequence rules, want 1", len(cfg.SequenceRules))
+	}
+	if cfg.SequenceRules[0].Name != "test-sequence" {
+		t.Errorf("sequence rule name wrong, got %q", cfg.SequenceRules[0].Name)
+	}
+	if cfg.SequenceRules[0].Window != "5m" {
+		t.Errorf("sequence rule window wrong, got %q", cfg.SequenceRules[0].Window)
+	}
+}
