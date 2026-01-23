@@ -246,6 +246,80 @@ func (m *Manager) BudgetStatus() *BudgetStatus {
 	return m.budget.Status()
 }
 
+// Complete sends a raw prompt to an LLM provider and returns the response.
+// This is useful for custom analysis that doesn't fit the structured Analyze method.
+func (m *Manager) Complete(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	if !m.cfg.Enabled {
+		return "", ErrDisabled
+	}
+
+	// Check rate limit
+	if m.rateLimiter != nil && !m.rateLimiter.Allow() {
+		return "", ErrRateLimited
+	}
+
+	// Check budget
+	if m.budget != nil && m.budget.Exceeded() {
+		return "", ErrBudgetExceeded
+	}
+
+	// Try providers in order
+	var lastErr error
+	for _, pt := range m.cfg.ProviderOrder {
+		provider, ok := m.providers[pt]
+		if !ok {
+			continue
+		}
+
+		// Check if provider is available
+		if !provider.Available(ctx) {
+			logger.Debug().
+				Str("provider", string(pt)).
+				Msg("Provider not available for completion, trying next")
+			continue
+		}
+
+		// Get timeout for this provider type
+		timeout := m.getTimeout(pt)
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+
+		// Perform completion via Analyze with a custom request
+		start := time.Now()
+		resp, err := provider.Analyze(ctx, &AnalysisRequest{
+			Type:      AnalysisCustom,
+			SystemPrompt: systemPrompt,
+			UserPrompt:   userPrompt,
+		})
+		cancel()
+
+		if err != nil {
+			lastErr = err
+			logger.Warn().
+				Str("provider", string(pt)).
+				Err(err).
+				Msg("Provider completion failed, trying next")
+			continue
+		}
+
+		// Record cost if tracked
+		if m.budget != nil && resp.CostCents > 0 {
+			m.budget.Record(resp.CostCents)
+		}
+
+		logger.Debug().
+			Str("provider", string(pt)).
+			Dur("latency", time.Since(start)).
+			Msg("LLM completion successful")
+
+		return resp.RawResponse, nil
+	}
+
+	if lastErr != nil {
+		return "", fmt.Errorf("all providers failed: %w", lastErr)
+	}
+	return "", ErrNoProviders
+}
+
 // Close releases all resources.
 func (m *Manager) Close() error {
 	m.mu.Lock()

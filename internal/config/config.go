@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/ihavespoons/hooksy/internal/ctvp"
 	"github.com/ihavespoons/hooksy/internal/hooks"
 	"github.com/ihavespoons/hooksy/internal/llm"
 )
@@ -13,6 +14,7 @@ type Config struct {
 	Allowlist     []Rule         `yaml:"allowlist,omitempty"`
 	SequenceRules []SequenceRule `yaml:"sequence_rules,omitempty"`
 	LLM           *llm.Config    `yaml:"llm,omitempty"`
+	CTVP          *ctvp.Config   `yaml:"ctvp,omitempty"`
 }
 
 // Settings contains global configuration settings
@@ -176,6 +178,7 @@ func DefaultConfig() *Config {
 				},
 			},
 		},
-		LLM: llm.DefaultConfig(),
+		LLM:  llm.DefaultConfig(),
+		CTVP: ctvp.DefaultConfig(),
 	}
 }

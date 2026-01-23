@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ihavespoons/hooksy/internal/config"
+	"github.com/ihavespoons/hooksy/internal/ctvp"
 	"github.com/ihavespoons/hooksy/internal/hooks"
 	"github.com/ihavespoons/hooksy/internal/llm"
 	"github.com/ihavespoons/hooksy/internal/logger"
@@ -15,12 +16,13 @@ import (
 
 // Engine is the main inspection engine
 type Engine struct {
-	cfg         *config.Config
-	evaluator   *Evaluator
-	store       trace.SessionStore
-	analyzer    *trace.Analyzer
-	llmManager  *llm.Manager
-	llmAnalyzer *llm.Analyzer
+	cfg          *config.Config
+	evaluator    *Evaluator
+	store        trace.SessionStore
+	analyzer     *trace.Analyzer
+	llmManager   *llm.Manager
+	llmAnalyzer  *llm.Analyzer
+	ctvpAnalyzer *ctvp.Analyzer
 }
 
 // NewEngine creates a new inspection engine
@@ -77,7 +79,37 @@ func NewEngineWithLLMAndTracing(cfg *config.Config, llmManager *llm.Manager, sto
 		e.llmAnalyzer = llm.NewAnalyzer(llmManager, cfg.LLM)
 	}
 
+	// Initialize CTVP analyzer if enabled
+	if cfg.CTVP != nil && cfg.CTVP.Enabled && llmManager != nil {
+		e.ctvpAnalyzer = ctvp.NewAnalyzer(cfg.CTVP, NewLLMClientAdapter(llmManager))
+	}
+
 	return e
+}
+
+// SetCTVPAnalyzer sets the CTVP analyzer (for testing or deferred initialization)
+func (e *Engine) SetCTVPAnalyzer(analyzer *ctvp.Analyzer) {
+	e.ctvpAnalyzer = analyzer
+}
+
+// CTVPEnabled returns true if CTVP analysis is enabled
+func (e *Engine) CTVPEnabled() bool {
+	return e.ctvpAnalyzer != nil && e.cfg.CTVP != nil && e.cfg.CTVP.Enabled
+}
+
+// LLMClientAdapter adapts llm.Manager to ctvp.LLMClient interface
+type LLMClientAdapter struct {
+	manager *llm.Manager
+}
+
+// NewLLMClientAdapter creates a new adapter
+func NewLLMClientAdapter(manager *llm.Manager) *LLMClientAdapter {
+	return &LLMClientAdapter{manager: manager}
+}
+
+// Complete implements ctvp.LLMClient
+func (a *LLMClientAdapter) Complete(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	return a.manager.Complete(ctx, systemPrompt, userPrompt)
 }
 
 // SetStore sets the session store for tracing (can be used to enable tracing after engine creation)
@@ -154,6 +186,23 @@ func (e *Engine) inspectPreToolUse(inputJSON []byte) (*hooks.HookOutput, error) 
 		evaluation.ModifiedInput = modifiedInput
 	}
 
+	// CTVP analysis if enabled (for code-executing tools)
+	var ctvpResult *ctvp.CTVPResult
+	if e.CTVPEnabled() {
+		code := e.extractCode(input.ToolName, input.ToolInput)
+		if code != "" && e.ctvpAnalyzer.ShouldAnalyze(input.ToolName, code) {
+			ctx := context.Background()
+			result, err := e.ctvpAnalyzer.Analyze(ctx, code, input.ToolName)
+			if err != nil {
+				logger.Warn().Err(err).Msg("CTVP analysis failed")
+			} else if result != nil {
+				ctvpResult = result
+				// Combine CTVP decision with rule decision
+				evaluation = e.combineCTVPDecision(evaluation, result)
+			}
+		}
+	}
+
 	// LLM analysis if enabled
 	if e.LLMEnabled() {
 		ctx := context.Background()
@@ -166,6 +215,15 @@ func (e *Engine) inspectPreToolUse(inputJSON []byte) (*hooks.HookOutput, error) 
 			if finalDecision != evaluation.Decision {
 				evaluation.Decision = finalDecision
 				evaluation.Message = fmt.Sprintf("LLM override: %s (confidence: %.2f)", llmResp.Reasoning, llmResp.Confidence)
+			}
+		}
+	}
+
+	// Store CTVP result if analysis was performed
+	if ctvpResult != nil && e.store != nil {
+		if ctvpStore, ok := e.store.(trace.CTVPStore); ok {
+			if err := ctvpStore.StoreCTVPResult(input.SessionID, ctvpResult); err != nil {
+				logger.Debug().Err(err).Msg("Failed to store CTVP result")
 			}
 		}
 	}
@@ -526,6 +584,65 @@ func (e *Engine) extractDecision(output *hooks.HookOutput) string {
 		return string(output.HookSpecificOutput.PermissionDecision)
 	}
 	return "allow"
+}
+
+// extractCode extracts code content from tool input based on tool type
+func (e *Engine) extractCode(toolName string, toolInput map[string]interface{}) string {
+	switch toolName {
+	case "Bash":
+		if cmd, ok := toolInput["command"].(string); ok {
+			return cmd
+		}
+	case "Write":
+		if content, ok := toolInput["content"].(string); ok {
+			return content
+		}
+	case "Edit":
+		if newStr, ok := toolInput["new_string"].(string); ok {
+			return newStr
+		}
+	}
+	return ""
+}
+
+// combineCTVPDecision integrates CTVP analysis result into the rule evaluation
+func (e *Engine) combineCTVPDecision(evaluation *RuleEvaluation, ctvpResult *ctvp.CTVPResult) *RuleEvaluation {
+	if ctvpResult == nil {
+		return evaluation
+	}
+
+	// Decision priority mapping
+	priority := map[string]int{
+		"block": 4,
+		"deny":  3,
+		"ask":   2,
+		"allow": 1,
+	}
+
+	ctvpDecision := string(ctvpResult.Decision)
+	currentDecision := evaluation.Decision
+	if currentDecision == "" {
+		currentDecision = "allow"
+	}
+
+	currentPriority := priority[currentDecision]
+	ctvpPriority := priority[ctvpDecision]
+
+	// If CTVP has a more restrictive decision, use it
+	if ctvpPriority > currentPriority {
+		logger.Info().
+			Str("rule_decision", currentDecision).
+			Str("ctvp_decision", ctvpDecision).
+			Float64("ctvp_score", ctvpResult.AggregateScore).
+			Int("anomalies", len(ctvpResult.Anomalies)).
+			Msg("CTVP triggered more restrictive decision")
+
+		evaluation.Decision = ctvpDecision
+		evaluation.Message = fmt.Sprintf("CTVP analysis: %s (score: %.2f, anomalies: %d)",
+			ctvpResult.Reasoning, ctvpResult.AggregateScore, len(ctvpResult.Anomalies))
+	}
+
+	return evaluation
 }
 
 // combineOutputs combines the rule-based output with sequence analysis output

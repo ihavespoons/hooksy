@@ -1,7 +1,9 @@
 package trace
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -38,6 +40,16 @@ type SessionStore interface {
 
 	// Lifecycle
 	Close() error
+}
+
+// CTVPStore extends SessionStore with CTVP-specific storage
+type CTVPStore interface {
+	SessionStore
+
+	// CTVP result management
+	StoreCTVPResult(sessionID string, result interface{}) error
+	GetCTVPResults(sessionID string, limit int) ([]interface{}, error)
+	GetCTVPResultByHash(sessionID, codeHash string) (interface{}, error)
 }
 
 // SQLiteStore implements SessionStore using SQLite
@@ -110,8 +122,23 @@ func (s *SQLiteStore) initSchema() error {
 		FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 	);
 
+	CREATE TABLE IF NOT EXISTS ctvp_results (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_id TEXT NOT NULL,
+		timestamp INTEGER NOT NULL,
+		tool_name TEXT,
+		code_hash TEXT,
+		aggregate_score REAL,
+		decision TEXT,
+		anomaly_count INTEGER,
+		result_json TEXT,
+		FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, timestamp);
 	CREATE INDEX IF NOT EXISTS idx_events_tool_use_id ON events(tool_use_id);
+	CREATE INDEX IF NOT EXISTS idx_ctvp_session ON ctvp_results(session_id, timestamp);
+	CREATE INDEX IF NOT EXISTS idx_ctvp_hash ON ctvp_results(session_id, code_hash);
 	`
 
 	_, err := s.db.Exec(schema)
@@ -522,6 +549,115 @@ func (s *SQLiteStore) CleanupExcessEvents(sessionID string, maxEvents int) (int6
 // Close closes the database connection
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
+}
+
+// StoreCTVPResult stores a CTVP analysis result
+func (s *SQLiteStore) StoreCTVPResult(sessionID string, result interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Type assert to get the fields we need
+	type ctvpResultLike struct {
+		ToolName       string  `json:"tool_name"`
+		AggregateScore float64 `json:"aggregate_score"`
+		Decision       string  `json:"decision"`
+		Anomalies      []interface{} `json:"anomalies"`
+		OriginalCode   string  `json:"original_code"`
+	}
+
+	// Marshal and unmarshal to extract fields
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("failed to marshal CTVP result: %w", err)
+	}
+
+	var parsed ctvpResultLike
+	if err := json.Unmarshal(resultJSON, &parsed); err != nil {
+		return fmt.Errorf("failed to parse CTVP result: %w", err)
+	}
+
+	// Generate code hash
+	codeHash := ""
+	if parsed.OriginalCode != "" {
+		h := sha256.Sum256([]byte(parsed.OriginalCode))
+		codeHash = hex.EncodeToString(h[:16])
+	}
+
+	_, err = s.db.Exec(
+		`INSERT INTO ctvp_results (session_id, timestamp, tool_name, code_hash, aggregate_score, decision, anomaly_count, result_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		sessionID,
+		time.Now().Unix(),
+		parsed.ToolName,
+		codeHash,
+		parsed.AggregateScore,
+		parsed.Decision,
+		len(parsed.Anomalies),
+		string(resultJSON),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to store CTVP result: %w", err)
+	}
+
+	return nil
+}
+
+// GetCTVPResults retrieves recent CTVP results for a session
+func (s *SQLiteStore) GetCTVPResults(sessionID string, limit int) ([]interface{}, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rows, err := s.db.Query(
+		`SELECT result_json FROM ctvp_results WHERE session_id = ? ORDER BY timestamp DESC LIMIT ?`,
+		sessionID, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get CTVP results: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []interface{}
+	for rows.Next() {
+		var resultJSON string
+		if err := rows.Scan(&resultJSON); err != nil {
+			return nil, fmt.Errorf("failed to scan CTVP result: %w", err)
+		}
+
+		var result interface{}
+		if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
+			logger.Debug().Err(err).Msg("Failed to unmarshal CTVP result")
+			continue
+		}
+		results = append(results, result)
+	}
+
+	return results, rows.Err()
+}
+
+// GetCTVPResultByHash retrieves a CTVP result by code hash
+func (s *SQLiteStore) GetCTVPResultByHash(sessionID, codeHash string) (interface{}, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var resultJSON string
+	err := s.db.QueryRow(
+		`SELECT result_json FROM ctvp_results WHERE session_id = ? AND code_hash = ? ORDER BY timestamp DESC LIMIT 1`,
+		sessionID, codeHash,
+	).Scan(&resultJSON)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get CTVP result: %w", err)
+	}
+
+	var result interface{}
+	if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal CTVP result: %w", err)
+	}
+
+	return result, nil
 }
 
 // MaybeRunCleanup runs cleanup with the given probability

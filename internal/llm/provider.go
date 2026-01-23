@@ -26,6 +26,7 @@ const (
 	AnalysisIntentAction AnalysisType = "intent_action"  // Pre vs Post tool comparison
 	AnalysisContextual   AnalysisType = "contextual"     // Is this suspicious in context?
 	AnalysisStop         AnalysisType = "stop"           // Session termination analysis
+	AnalysisCustom       AnalysisType = "custom"         // Custom prompt completion (for CTVP)
 )
 
 // AnalysisDecision represents the LLM's recommendation.
@@ -101,6 +102,9 @@ type AnalysisRequest struct {
 
 	// SystemPrompt is prepended to the analysis prompt if set.
 	SystemPrompt string
+
+	// UserPrompt is the user-provided prompt for custom analysis (AnalysisCustom).
+	UserPrompt string
 }
 
 // AnalysisContext provides contextual information for analysis.
@@ -152,6 +156,9 @@ type AnalysisResponse struct {
 
 	// Cached indicates if this response came from cache.
 	Cached bool
+
+	// RawResponse contains the raw text response for custom analysis.
+	RawResponse string
 }
 
 // Finding represents a specific issue found during analysis.
