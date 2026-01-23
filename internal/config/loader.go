@@ -111,6 +111,13 @@ func mergeConfigs(base, override *Config) *Config {
 		result.Version = base.Version
 	}
 
+	// Merge LLM config - override takes precedence if set
+	if override.LLM != nil {
+		result.LLM = override.LLM
+	} else {
+		result.LLM = base.LLM
+	}
+
 	return result
 }
 

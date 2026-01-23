@@ -1,6 +1,9 @@
 package config
 
-import "github.com/ihavespoons/hooksy/internal/hooks"
+import (
+	"github.com/ihavespoons/hooksy/internal/hooks"
+	"github.com/ihavespoons/hooksy/internal/llm"
+)
 
 // Config represents the complete hooksy configuration
 type Config struct {
@@ -9,6 +12,7 @@ type Config struct {
 	Rules         Rules          `yaml:"rules"`
 	Allowlist     []Rule         `yaml:"allowlist,omitempty"`
 	SequenceRules []SequenceRule `yaml:"sequence_rules,omitempty"`
+	LLM           *llm.Config    `yaml:"llm,omitempty"`
 }
 
 // Settings contains global configuration settings
@@ -152,6 +156,26 @@ func DefaultConfig() *Config {
 			DefaultDecision: "allow",
 			Trace:           DefaultTraceSettings(),
 		},
-		Rules: Rules{},
+		Rules: Rules{
+			PreToolUse: []Rule{
+				{
+					Name:        "protect-hooksy-config",
+					Description: "Prevent agents from modifying hooksy configuration",
+					Enabled:     true,
+					Priority:    200,
+					Conditions: Conditions{
+						ToolName: `^(Write|Edit|NotebookEdit|mcp__.*__(Write|Edit))$`,
+						ToolInput: map[string][]PatternMatch{
+							"file_path": {
+								{Pattern: `\.hooksy/`, Message: "Modification of hooksy configuration is not allowed"},
+								{Pattern: `hooksy.*\.ya?ml$`, Message: "Modification of hooksy configuration is not allowed"},
+							},
+						},
+					},
+					Decision: "deny",
+				},
+			},
+		},
+		LLM: llm.DefaultConfig(),
 	}
 }

@@ -131,11 +131,16 @@ rules:
 	if cfg.Settings.DefaultDecision != "deny" {
 		t.Errorf("got DefaultDecision=%q, want \"deny\"", cfg.Settings.DefaultDecision)
 	}
-	if len(cfg.Rules.PreToolUse) != 1 {
-		t.Errorf("got %d PreToolUse rules, want 1", len(cfg.Rules.PreToolUse))
+	// Should have 2 rules: protect-hooksy-config from default + global-rule
+	if len(cfg.Rules.PreToolUse) != 2 {
+		t.Errorf("got %d PreToolUse rules, want 2", len(cfg.Rules.PreToolUse))
 	}
-	if cfg.Rules.PreToolUse[0].Name != "global-rule" {
-		t.Errorf("got rule name %q, want \"global-rule\"", cfg.Rules.PreToolUse[0].Name)
+	// protect-hooksy-config has priority 200, global-rule has no priority (0)
+	if cfg.Rules.PreToolUse[0].Name != "protect-hooksy-config" {
+		t.Errorf("got first rule name %q, want \"protect-hooksy-config\"", cfg.Rules.PreToolUse[0].Name)
+	}
+	if cfg.Rules.PreToolUse[1].Name != "global-rule" {
+		t.Errorf("got second rule name %q, want \"global-rule\"", cfg.Rules.PreToolUse[1].Name)
 	}
 }
 
@@ -207,14 +212,20 @@ rules:
 		t.Errorf("got DefaultDecision=%q, want \"allow\"", cfg.Settings.DefaultDecision)
 	}
 
-	// Should have both rules merged
-	if len(cfg.Rules.PreToolUse) != 2 {
-		t.Errorf("got %d PreToolUse rules, want 2", len(cfg.Rules.PreToolUse))
+	// Should have 3 rules merged: protect-hooksy-config (default) + global-rule + project-rule
+	if len(cfg.Rules.PreToolUse) != 3 {
+		t.Errorf("got %d PreToolUse rules, want 3", len(cfg.Rules.PreToolUse))
 	}
 
-	// Higher priority rule should be first
-	if cfg.Rules.PreToolUse[0].Name != "project-rule" {
-		t.Errorf("expected project-rule first (higher priority), got %q", cfg.Rules.PreToolUse[0].Name)
+	// Rules sorted by priority: protect-hooksy-config (200), project-rule (100), global-rule (50)
+	if cfg.Rules.PreToolUse[0].Name != "protect-hooksy-config" {
+		t.Errorf("expected protect-hooksy-config first (priority 200), got %q", cfg.Rules.PreToolUse[0].Name)
+	}
+	if cfg.Rules.PreToolUse[1].Name != "project-rule" {
+		t.Errorf("expected project-rule second (priority 100), got %q", cfg.Rules.PreToolUse[1].Name)
+	}
+	if cfg.Rules.PreToolUse[2].Name != "global-rule" {
+		t.Errorf("expected global-rule third (priority 50), got %q", cfg.Rules.PreToolUse[2].Name)
 	}
 }
 

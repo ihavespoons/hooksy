@@ -176,3 +176,18 @@ func NewModifyOutput(eventName EventType, reason string, updatedInput map[string
 		},
 	}
 }
+
+// NewStopAllowOutput creates an allow output for Stop events (no hookSpecificOutput)
+func NewStopAllowOutput() *HookOutput {
+	return &HookOutput{
+		Continue: true,
+	}
+}
+
+// NewStopContinueOutput creates an output for Stop events that continues processing
+func NewStopContinueOutput(stopReason string) *HookOutput {
+	return &HookOutput{
+		Continue:   true,
+		StopReason: stopReason,
+	}
+}

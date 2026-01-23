@@ -118,9 +118,7 @@ func runRulesList(cmd *cobra.Command, args []string) error {
 }
 
 func runRulesTest(cmd *cobra.Command, args []string) error {
-	_ = logger.Init("debug", "")
-
-	// Load config
+	// Load config first so we can use log settings
 	loader, err := config.NewLoader(projectDir)
 	if err != nil {
 		return fmt.Errorf("failed to create config loader: %w", err)
@@ -135,6 +133,9 @@ func runRulesTest(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		cfg = config.DefaultConfig()
 	}
+
+	// Initialize logging with config settings (always debug for rule testing)
+	_ = logger.Init("debug", cfg.Settings.LogFile)
 
 	// Read input file
 	inputData, err := os.ReadFile(testInputFile)
