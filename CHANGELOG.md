@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/ihavespoons/hooksy/compare/v0.3.0...v0.4.0) (2026-01-23)
+
+
+### Features
+
+* Display model name in Claude CLI provider status ([9407975](https://github.com/ihavespoons/hooksy/commit/94079757c88ef9ae48adf8fe1fc039f983ed78f9))
+* Display model name in Claude CLI provider status ([dbae41f](https://github.com/ihavespoons/hooksy/commit/dbae41f8e10eed290990b5b689dac0fee975dff2))
+
 ## [0.2.0](https://github.com/ihavespoons/hooksy/compare/v0.1.0...v0.2.0) (2026-01-23)
 
 
