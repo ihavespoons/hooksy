@@ -168,7 +168,7 @@ func DefaultConfig() *Config {
 						ToolInput: map[string][]PatternMatch{
 							"file_path": {
 								{Pattern: `\.hooksy/`, Message: "Modification of hooksy configuration is not allowed"},
-								{Pattern: `hooksy.*\.ya?ml$`, Message: "Modification of hooksy configuration is not allowed"},
+								{Pattern: `(^|/)hooksy[^/]*\.ya?ml$`, Message: "Modification of hooksy configuration is not allowed"},
 							},
 						},
 					},

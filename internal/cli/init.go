@@ -91,6 +91,22 @@ func generateStarterConfig() *config.Config {
 		Rules: config.Rules{
 			PreToolUse: []config.Rule{
 				{
+					Name:        "protect-hooksy-config",
+					Description: "Prevent agents from modifying hooksy configuration",
+					Enabled:     true,
+					Priority:    200,
+					Conditions: config.Conditions{
+						ToolName: `^(Write|Edit|NotebookEdit|mcp__.*__(Write|Edit))$`,
+						ToolInput: map[string][]config.PatternMatch{
+							"file_path": {
+								{Pattern: `\.hooksy/`, Message: "Modification of hooksy configuration is not allowed"},
+								{Pattern: `(^|/)hooksy[^/]*\.ya?ml$`, Message: "Modification of hooksy configuration is not allowed"},
+							},
+						},
+					},
+					Decision: "deny",
+				},
+				{
 					Name:        "block-dangerous-commands",
 					Description: "Block potentially dangerous shell commands",
 					Enabled:     true,

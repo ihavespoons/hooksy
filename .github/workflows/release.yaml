@@ -6,6 +6,7 @@ on:
       - main
     tags:
       - "v*"
+  workflow_dispatch:
 
 env:
   GO_VERSION: "1.25.4"
@@ -28,6 +29,7 @@ jobs:
         uses: googleapis/release-please-action@v4
         with:
           release-type: go
+          skip-github-release: true
 
   goreleaser:
     name: GoReleaser
