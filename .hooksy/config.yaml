@@ -4,6 +4,14 @@ settings:
     log_file: /tmp/hooksy-trace.log
     default_decision: allow
 
+    # Execution trace analysis settings
+    trace:
+        enabled: true
+        storage_path: ""  # Empty = ~/.hooksy/traces/sessions.db
+        session_ttl: 24h
+        max_events_per_session: 1000
+        cleanup_probability: 0.1
+
 # LLM-based analysis configuration
 llm:
     enabled: true
