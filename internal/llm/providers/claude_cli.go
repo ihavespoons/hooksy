@@ -68,12 +68,17 @@ func (p *ClaudeCLIProvider) Type() llm.ProviderType {
 
 // Name returns the human-readable provider name.
 func (p *ClaudeCLIProvider) Name() string {
+	binaryName := "claude"
 	if p.binaryPath != "" {
 		// Extract just the binary name
 		parts := strings.Split(p.binaryPath, "/")
-		return fmt.Sprintf("Claude CLI (%s)", parts[len(parts)-1])
+		binaryName = parts[len(parts)-1]
 	}
-	return "Claude CLI"
+
+	if p.model != "" {
+		return fmt.Sprintf("Claude CLI (%s, %s)", binaryName, p.model)
+	}
+	return fmt.Sprintf("Claude CLI (%s)", binaryName)
 }
 
 // Available checks if the provider is available.

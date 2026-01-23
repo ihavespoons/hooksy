@@ -56,7 +56,7 @@ func TestNewManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	if manager == nil {
 		t.Fatal("expected non-nil manager")
@@ -68,7 +68,7 @@ func TestNewManager_NilConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	if manager.cfg == nil {
 		t.Error("expected default config to be set")
@@ -92,7 +92,7 @@ func TestManager_Analyze_Disabled(t *testing.T) {
 	cfg.Enabled = false
 
 	manager, _ := NewManager(cfg, nil)
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	_, err := manager.Analyze(context.Background(), &AnalysisRequest{})
 	if !errors.Is(err, ErrDisabled) {
@@ -105,7 +105,7 @@ func TestManager_Analyze_NoProviders(t *testing.T) {
 	cfg.Enabled = true
 
 	manager, _ := NewManager(cfg, nil)
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	_, err := manager.Analyze(context.Background(), &AnalysisRequest{})
 	if !errors.Is(err, ErrNoProviders) {
@@ -123,7 +123,7 @@ func TestManager_Analyze_Success(t *testing.T) {
 	}
 
 	manager, _ := NewManager(cfg, factories)
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	resp, err := manager.Analyze(context.Background(), &AnalysisRequest{
 		Type:      AnalysisContextual,
@@ -153,7 +153,7 @@ func TestManager_Analyze_Fallback(t *testing.T) {
 	}
 
 	manager, _ := NewManager(cfg, factories)
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	resp, err := manager.Analyze(context.Background(), &AnalysisRequest{})
 	if err != nil {
@@ -190,7 +190,7 @@ func TestManager_Analyze_Caching(t *testing.T) {
 	}
 
 	manager, _ := NewManager(cfg, factories)
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	req := &AnalysisRequest{
 		Type:      AnalysisContextual,
@@ -227,7 +227,7 @@ func TestManager_AvailableProviders(t *testing.T) {
 	}
 
 	manager, _ := NewManager(cfg, factories)
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	available := manager.AvailableProviders(context.Background())
 	if len(available) != 2 {
@@ -246,7 +246,7 @@ func TestManager_ProviderStatus(t *testing.T) {
 	}
 
 	manager, _ := NewManager(cfg, factories)
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	status := manager.ProviderStatus(context.Background())
 

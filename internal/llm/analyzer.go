@@ -49,7 +49,7 @@ func (a *Analyzer) ShouldAnalyze(eventType hooks.EventType, toolName string, rul
 	}
 
 	var analysisTypes []AnalysisType
-	var mode Mode = a.cfg.Mode
+	mode := a.cfg.Mode
 
 	for _, trigger := range triggers {
 		if a.matchesTrigger(trigger, toolName, ruleMatched, ruleDecision) {
@@ -144,7 +144,7 @@ func (a *Analyzer) AnalyzePreToolUse(ctx context.Context, input *hooks.PreToolUs
 	}
 
 	// For PreToolUse, contextual analysis is most relevant
-	var primaryType AnalysisType = AnalysisContextual
+	primaryType := AnalysisContextual
 	for _, t := range analysisTypes {
 		if t == AnalysisContextual {
 			primaryType = t
@@ -185,7 +185,7 @@ func (a *Analyzer) AnalyzePostToolUse(ctx context.Context, input *hooks.PostTool
 	}
 
 	// For PostToolUse, intent vs action analysis is most relevant
-	var primaryType AnalysisType = AnalysisIntentAction
+	primaryType := AnalysisIntentAction
 	for _, t := range analysisTypes {
 		if t == AnalysisIntentAction {
 			primaryType = t
@@ -227,7 +227,7 @@ func (a *Analyzer) AnalyzeStop(ctx context.Context, input *hooks.StopInput, rule
 	}
 
 	// For Stop, stop analysis is most relevant
-	var primaryType AnalysisType = AnalysisStop
+	primaryType := AnalysisStop
 	for _, t := range analysisTypes {
 		if t == AnalysisStop {
 			primaryType = t
@@ -270,7 +270,7 @@ func (a *Analyzer) AnalyzeUserPrompt(ctx context.Context, input *hooks.UserPromp
 		return nil, nil
 	}
 
-	var primaryType AnalysisType = AnalysisContextual
+	primaryType := AnalysisContextual
 	if len(analysisTypes) > 0 {
 		primaryType = analysisTypes[0]
 	}

@@ -110,7 +110,7 @@ func runLLMStatus(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create LLM manager: %w", err)
 	}
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	ctx := context.Background()
 	status := manager.ProviderStatus(ctx)
@@ -221,7 +221,7 @@ func runLLMTest(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create LLM manager: %w", err)
 	}
-	defer manager.Close()
+	defer func() { _ = manager.Close() }()
 
 	// Check available providers
 	ctx := context.Background()
