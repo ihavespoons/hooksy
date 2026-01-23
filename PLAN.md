@@ -357,19 +357,48 @@ Hooksy outputs JSON to stdout matching Claude Code's expected format:
 - [x] `hooksy rules test` command
 - [x] Verbose mode and debugging
 
-### Phase 4: LLM Integration - PENDING
-- [ ] Anthropic API client
-- [ ] Prompt templates
-- [ ] LLM-based rule evaluation
-- [ ] Caching for repeated patterns
+### Phase 4: LLM Integration - COMPLETE
+- [x] Multi-provider support (Claude CLI, Anthropic API, OpenAI, HuggingFace)
+- [x] Provider fallback chain with automatic failover
+- [x] Analysis modes: sync, async, hybrid
+- [x] Configurable analysis triggers by event type
+- [x] Custom prompt templates with placeholders
+- [x] Response caching with TTL
+- [x] Rate limiting (requests/min with burst)
+- [x] Budget controls (daily spend limits)
+- [x] `hooksy llm status` command
+- [x] `hooksy llm test` command
+- [x] Contextual analysis for PreToolUse
+- [x] Intent vs action analysis for PostToolUse
+- [x] Stop event analysis
+- [x] Transcript analysis prompts
+
+### Phase 5: Execution Trace Analysis - COMPLETE
+- [x] Session tracking with SQLite storage
+- [x] Event tracing across sessions
+- [x] `hooksy trace list` command
+- [x] `hooksy trace show` command
+- [x] `hooksy trace clear` command
+- [x] `hooksy trace analyze` command for transcript analysis
+- [x] Deception indicator detection
+- [x] Monitoring awareness pattern detection
+- [x] Obfuscation attempt detection
+- [x] Intent vs action mismatch detection
+- [x] Risk scoring with severity levels
+- [x] Sequence rules for multi-event pattern correlation
+- [x] Configurable time windows for sequence analysis
+- [x] Pattern labeling and event chaining
 
 ## Next Steps
 
 1. ~~**Onboard with Serena** - Integrate with Serena MCP server for project management~~ DONE
 2. ~~**Input modification** - Fully implement tool input modification (e.g., auto-add --dry-run)~~ DONE
 3. ~~**Testing** - Add unit tests for engine, matcher, evaluator~~ DONE (99 tests, 91-100% coverage)
-4. **LLM integration** - Add Claude Haiku for complex pattern detection
-5. **CI/CD** - GitHub Actions for build/test/release
+4. ~~**LLM integration** - Add multi-provider LLM support with fallback chain~~ DONE
+5. ~~**Execution trace analysis** - Session tracking and behavioral analysis~~ DONE
+6. **Rule inheritance** - Support rule composition and inheritance
+7. **Metrics and audit logging** - Track decisions and generate reports
+8. **Web dashboard** - Rule management and monitoring UI
 
 ## Dependencies
 
@@ -378,6 +407,9 @@ Hooksy outputs JSON to stdout matching Claude Code's expected format:
 - `gopkg.in/yaml.v3` - YAML parsing
 - `github.com/rs/zerolog` - Structured logging
 - `github.com/stretchr/testify` - Testing
+- `github.com/mattn/go-sqlite3` - SQLite driver for trace storage
+- `github.com/anthropics/anthropic-sdk-go` - Anthropic API client
+- `github.com/sashabaranov/go-openai` - OpenAI API client
 
 ## Example Usage Flow
 
@@ -394,10 +426,10 @@ Hooksy outputs JSON to stdout matching Claude Code's expected format:
    - Outputs decision JSON to stdout
 5. Claude Code receives deny decision and shows message to user
 
-## Questions for Clarification
+## Questions for Clarification (Resolved)
 
-1. **Default behavior**: Should the default be "allow" (permissive) or "deny" (restrictive) when no rules match?
-2. **Rule combination**: Should multiple matching rules combine (all must pass) or first-match-wins?
-3. **Logging location**: Should logs go to stderr, a file, or both?
-4. **Installation method**: Preferences for distribution (brew, go install, binary releases)?
-5. **MCP tool handling**: Any specific MCP servers that need special handling?
+1. **Default behavior**: ~~Should the default be "allow" (permissive) or "deny" (restrictive) when no rules match?~~ RESOLVED: Configurable via `settings.default_decision`, defaults to "allow"
+2. **Rule combination**: ~~Should multiple matching rules combine (all must pass) or first-match-wins?~~ RESOLVED: First-match-wins with priority ordering
+3. **Logging location**: ~~Should logs go to stderr, a file, or both?~~ RESOLVED: Configurable via `settings.log_file`, defaults to stderr
+4. **Installation method**: ~~Preferences for distribution (brew, go install, binary releases)?~~ RESOLVED: go install and binary releases via goreleaser
+5. **MCP tool handling**: ~~Any specific MCP servers that need special handling?~~ RESOLVED: MCP tools matched via `mcp__.*__ToolName` patterns

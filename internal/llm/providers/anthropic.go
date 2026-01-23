@@ -125,7 +125,7 @@ func (p *AnthropicProvider) Analyze(ctx context.Context, req *llm.AnalysisReques
 	if err != nil {
 		return nil, fmt.Errorf("API request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
