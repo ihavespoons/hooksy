@@ -1,0 +1,96 @@
+version: "1"
+
+# Strict security profile
+# Use this for high-security environments where you want maximum protection
+
+settings:
+  log_level: info
+  default_decision: deny  # Deny by default, only allow explicitly permitted actions
+
+rules:
+  PreToolUse:
+    - name: block-all-shell-commands
+      description: Block all shell command execution
+      enabled: true
+      priority: 100
+      conditions:
+        tool_name: "^(Bash|mcp__.*__Bash)$"
+      decision: deny
+
+    - name: block-all-file-writes
+      description: Block all file write operations
+      enabled: true
+      priority: 95
+      conditions:
+        tool_name: "^(Write|Edit|mcp__.*__(Write|Edit))$"
+      decision: ask
+
+    - name: block-web-fetch
+      description: Block web fetch operations
+      enabled: true
+      priority: 90
+      conditions:
+        tool_name: "^(WebFetch|mcp__.*__fetch)$"
+      decision: deny
+
+    - name: block-mcp-tools
+      description: Require approval for all MCP tool usage
+      enabled: true
+      priority: 80
+      conditions:
+        tool_name: "^mcp__"
+      decision: ask
+
+  PostToolUse:
+    - name: detect-all-credentials
+      description: Detect any credential-like patterns in output
+      enabled: true
+      priority: 100
+      conditions:
+        tool_response:
+          - pattern: 'AKIA[0-9A-Z]{16}'
+            message: AWS access key detected
+          - pattern: '-----BEGIN.*PRIVATE KEY-----'
+            message: Private key detected
+          - pattern: 'ghp_[a-zA-Z0-9]{36}'
+            message: GitHub token detected
+          - pattern: 'sk-[a-zA-Z0-9]{48}'
+            message: OpenAI API key detected
+          - pattern: 'xox[baprs]-[0-9a-zA-Z-]+'
+            message: Slack token detected
+          - pattern: 'eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*'
+            message: JWT token detected
+          - pattern: 'password\s*[:=]\s*[''"][^''"]+[''"]'
+            message: Hardcoded password detected
+          - pattern: 'api[_-]?key\s*[:=]\s*[''"][^''"]+[''"]'
+            message: API key detected
+      decision: block
+      system_message: Potential credential exposure detected. Output blocked for security review.
+
+  UserPromptSubmit:
+    - name: detect-injection-attempts
+      description: Detect prompt injection attempts
+      enabled: true
+      priority: 100
+      conditions:
+        prompt:
+          - pattern: '(?i)ignore (all |previous |prior )?instructions'
+            message: Prompt injection attempt
+          - pattern: '(?i)you are now|pretend (to be|you are)'
+            message: Role manipulation attempt
+          - pattern: '(?i)disregard'
+            message: Instruction override attempt
+          - pattern: '(?i)bypass|override|disable.*security'
+            message: Security bypass attempt
+      decision: deny
+
+allowlist:
+  - name: allow-read-source-files
+    description: Allow reading source code files only
+    enabled: true
+    conditions:
+      tool_name: "^Read$"
+      tool_input:
+        file_path:
+          - pattern: '\.(go|ts|tsx|js|jsx|py|rs|java|c|cpp|h|hpp|md|txt|json|yaml|yml|toml)$'
+    decision: allow
