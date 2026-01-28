@@ -1,0 +1,163 @@
+version: "1"
+
+# Trace Analysis Configuration
+# This profile demonstrates execution trace analysis with sequence rules
+# for detecting suspicious multi-event patterns.
+
+settings:
+  log_level: info
+  default_decision: allow
+
+  # Enable execution trace analysis
+  trace:
+    enabled: true
+    storage_path: ""        # Empty = ~/.hooksy/traces/sessions.db
+    session_ttl: 24h        # Keep traces for 24 hours
+    max_events_per_session: 1000
+    cleanup_probability: 0.1
+
+rules:
+  PreToolUse:
+    - name: block-dangerous-commands
+      description: Block obviously dangerous commands
+      enabled: true
+      priority: 100
+      conditions:
+        tool_name: "^Bash$"
+        tool_input:
+          command:
+            - pattern: 'rm\s+-rf\s+/'
+              message: Recursive delete from root
+            - pattern: 'mkfs\.'
+              message: Filesystem format command
+            - pattern: 'dd\s+.*of=/dev/'
+              message: Direct disk write
+      decision: block
+      system_message: Dangerous command blocked for security
+
+  PostToolUse:
+    - name: detect-credentials
+      description: Detect credential exposure in outputs
+      enabled: true
+      priority: 100
+      conditions:
+        tool_response:
+          - pattern: 'AKIA[0-9A-Z]{16}'
+            message: AWS access key detected
+          - pattern: '-----BEGIN.*PRIVATE KEY-----'
+            message: Private key detected
+      decision: block
+      system_message: Credential exposure detected
+
+# Sequence Rules - Multi-Event Pattern Detection
+sequence_rules:
+  # Detect credential access followed by network activity
+  - name: credential-then-network
+    description: Reading credentials followed by network requests
+    enabled: true
+    severity: critical
+    window: 5m
+    events:
+      - event_type: PostToolUse
+        tool_name: "^(Read|Bash)$"
+        tool_input:
+          file_path: "\\.(env|pem|key|crt)$|/\\.aws/|/\\.ssh/"
+        label: credential_read
+
+      - event_type: PreToolUse
+        tool_name: "^Bash$"
+        tool_input:
+          command: "(curl|wget|nc|ssh|scp|rsync).*"
+        after: credential_read
+
+    decision: deny
+    message: "Network request detected after reading credentials"
+
+  # Reconnaissance pattern detection
+  - name: reconnaissance-pattern
+    description: Rapid scanning of sensitive directories
+    enabled: true
+    severity: warning
+    window: 2m
+    events:
+      - event_type: PreToolUse
+        tool_name: "^(Read|Glob)$"
+        tool_input:
+          file_path: "/(etc|root|\\.ssh|\\.aws|\\.config).*"
+        count: ">=5"
+    decision: ask
+    message: "Unusual pattern of sensitive file access detected"
+
+  # Data staging detection
+  - name: data-staging
+    description: Large file reads followed by file writes
+    enabled: true
+    severity: warning
+    window: 10m
+    events:
+      - event_type: PostToolUse
+        tool_name: "^Read$"
+        label: large_read
+
+      - event_type: PreToolUse
+        tool_name: "^(Write|Bash)$"
+        tool_input:
+          command: "(base64|gzip|tar|zip).*"
+        after: large_read
+
+    decision: ask
+    message: "Potential data staging pattern detected"
+
+  # Privilege escalation detection
+  - name: privilege-escalation
+    description: Commands attempting privilege escalation
+    enabled: true
+    severity: critical
+    window: 5m
+    events:
+      - event_type: PreToolUse
+        tool_name: "^Bash$"
+        tool_input:
+          command: "(sudo|su\\s+-|chmod.*[0-7]?[0-7][0-7][0-7]|chown).*"
+        count: ">=3"
+    decision: deny
+    message: "Multiple privilege escalation attempts detected"
+
+  # Persistence mechanism detection
+  - name: persistence-detection
+    description: Attempts to establish persistence
+    enabled: true
+    severity: critical
+    window: 10m
+    events:
+      - event_type: PreToolUse
+        tool_name: "^(Write|Edit|Bash)$"
+        tool_input:
+          file_path: "/(\\.bashrc|\\.bash_profile|\\.profile|\\.zshrc|crontab|systemd).*"
+          command: "(crontab|systemctl\\s+(enable|start)).*"
+    decision: deny
+    message: "Persistence mechanism modification detected"
+
+  # Rapid file enumeration
+  - name: rapid-enumeration
+    description: Rapid enumeration of filesystem
+    enabled: true
+    severity: warning
+    window: 1m
+    events:
+      - event_type: PreToolUse
+        tool_name: "^(Glob|Read|Bash)$"
+        count: ">=20"
+    decision: ask
+    message: "Rapid filesystem enumeration detected"
+
+allowlist:
+  - name: allow-common-reads
+    description: Allow reading common source files
+    enabled: true
+    conditions:
+      tool_name: "^Read$"
+      tool_input:
+        file_path:
+          - pattern: '\.(go|ts|tsx|js|jsx|py|rs|java|md|txt|json|yaml|yml)$'
+    decision: allow

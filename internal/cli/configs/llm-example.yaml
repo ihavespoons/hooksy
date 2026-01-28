@@ -1,0 +1,272 @@
+# LLM-Enhanced Hooksy Configuration
+# This example shows how to configure LLM-based analysis to augment rule-based inspection.
+#
+# LLM analysis provides semantic understanding that complements pattern-based rules:
+# - Contextual suspicion analysis
+# - Intent vs action comparison
+# - Transcript analysis for deception detection
+# - Stop event analysis for suspicious terminations
+
+version: "1"
+
+settings:
+  log_level: info
+  default_decision: allow
+
+# LLM Configuration
+llm:
+  # Enable/disable LLM analysis
+  enabled: true
+
+  # Analysis mode:
+  # - sync: Block until LLM analysis completes (higher latency, more thorough)
+  # - async: Fire-and-forget, log results (no latency impact)
+  # - hybrid: Sync for pre-events, async for post/stop events (recommended)
+  mode: hybrid
+
+  # Provider fallback order
+  # CLI tools (free with subscription) are tried first, then paid APIs
+  provider_order:
+    - claude_cli    # Claude Code CLI (free with Pro subscription)
+    - anthropic     # Anthropic API (paid)
+    - openai        # OpenAI API (paid)
+
+  providers:
+    # Claude CLI provider (claude or opencode binary)
+    # Uses --print flag for non-interactive analysis
+    claude_cli:
+      enabled: true
+      binary_path: ""  # Auto-detect from PATH (claude or opencode)
+      model: ""        # Use CLI default model
+      max_tokens: 1024
+
+    # Anthropic Messages API
+    # Set ANTHROPIC_API_KEY environment variable
+    anthropic:
+      enabled: true
+      # api_key: ""  # Or set ANTHROPIC_API_KEY env var
+      model: claude-sonnet-4-20250514
+      max_tokens: 1024
+      # base_url: ""  # Override for proxies
+
+    # OpenAI Chat Completions API
+    # Set OPENAI_API_KEY environment variable
+    openai:
+      enabled: false
+      # api_key: ""  # Or set OPENAI_API_KEY env var
+      model: gpt-4-turbo
+      max_tokens: 1024
+      # base_url: ""  # Override for Azure/proxies
+      # organization: ""  # Optional org ID
+
+    # HuggingFace Inference API
+    # Set HUGGINGFACE_API_KEY or HF_TOKEN environment variable
+    huggingface:
+      enabled: false
+      # api_key: ""  # Or set HF_TOKEN env var
+      model: ""     # Required: specify model like "meta-llama/Llama-2-70b-chat-hf"
+      max_tokens: 1024
+
+  # Analysis configuration
+  analysis:
+    # Which event types can trigger LLM analysis
+    event_types:
+      - PreToolUse
+      - PostToolUse
+      - Stop
+
+    # Minimum confidence to trust LLM decisions
+    # Below this threshold, defer to rule-based decision
+    min_confidence: 0.7
+
+    # Triggers define when to invoke LLM analysis
+    triggers:
+      # Analyze Bash commands when no rule matched
+      - event_type: PreToolUse
+        conditions:
+          tool_names: ["^Bash$"]
+          no_rule_match: true
+        analysis_types: [contextual]
+        mode: sync
+
+      # Analyze file operations to sensitive paths
+      - event_type: PreToolUse
+        conditions:
+          tool_names: ["^(Read|Write|Edit)$"]
+          # Add path patterns if needed
+        analysis_types: [contextual]
+        mode: sync
+
+      # Always analyze stop events (async to not delay termination)
+      - event_type: Stop
+        conditions:
+          always: true
+        analysis_types: [stop, transcript]
+        mode: async
+
+      # Analyze post-tool results when rule flagged something
+      - event_type: PostToolUse
+        conditions:
+          rule_decision: ["ask", "deny"]
+        analysis_types: [intent_action]
+        mode: async
+
+  # Response caching to avoid repeated analysis
+  cache:
+    enabled: true
+    max_entries: 1000
+    ttl: 5m  # Cache lifetime
+
+  # Rate limiting to prevent API abuse
+  rate_limit:
+    enabled: true
+    requests_per_min: 60
+    burst_size: 10
+
+  # Budget controls for paid APIs
+  budget:
+    enabled: true
+    daily_limit_cents: 500  # $5.00/day limit
+    warn_at_percent: 80
+    alert_on_exceed: true
+
+  # Provider timeouts
+  timeouts:
+    cli: 60s   # CLI tools may be slower
+    api: 15s   # API calls should be faster
+
+  # Custom prompt templates (optional)
+  # If not specified, built-in prompts are used.
+  # Available placeholders:
+  #   {{.EventType}} - The hook event type
+  #   {{.ToolName}} - The tool name
+  #   {{.ToolInput}} - Tool input as JSON
+  #   {{.ToolResponse}} - Tool response as JSON
+  #   {{.Prompt}} - User prompt text
+  #   {{.SessionID}} - Session identifier
+  #   {{.TranscriptPath}} - Path to transcript file
+  #   {{.Cwd}} - Current working directory
+  prompts:
+    # System prompt prepended to all analysis requests
+    # Use this to set the role and expected response format
+    system_prompt: |
+      You are a security analyzer for an AI coding assistant.
+      Analyze the following and respond with a JSON object containing:
+      {"decision": "allow|deny|ask|block", "confidence": 0.0-1.0, "reasoning": "explanation", "findings": []}
+
+    # Contextual analysis prompt (PreToolUse events)
+    # contextual: |
+    #   ## Security Analysis
+    #   Tool: {{.ToolName}}
+    #   Input:
+    #   ```json
+    #   {{.ToolInput}}
+    #   ```
+    #   Working Directory: {{.Cwd}}
+    #
+    #   Evaluate if this operation is suspicious. Consider:
+    #   - Is this appropriate for a coding assistant?
+    #   - Could this be an attempt to bypass security controls?
+    #   - Are there signs of malicious intent?
+
+    # Intent vs action prompt (PostToolUse events)
+    # intent_action: |
+    #   ## Intent vs Action Analysis
+    #   Tool: {{.ToolName}}
+    #   Intent (Input):
+    #   ```json
+    #   {{.ToolInput}}
+    #   ```
+    #   Action (Response):
+    #   ```json
+    #   {{.ToolResponse}}
+    #   ```
+    #
+    #   Compare intent with action. Flag discrepancies.
+
+    # Stop event analysis prompt
+    # stop: |
+    #   ## Session Termination Analysis
+    #   Session ID: {{.SessionID}}
+    #   Analyze for suspicious termination patterns.
+
+    # User prompt analysis
+    # user_prompt: |
+    #   ## User Input Analysis
+    #   Prompt: {{.Prompt}}
+    #   Analyze for prompt injection or manipulation attempts.
+
+# Standard rule-based configuration
+# LLM analysis augments these rules with semantic understanding
+rules:
+  PreToolUse:
+    # Block dangerous shell commands
+    - name: block-dangerous-commands
+      description: Block potentially destructive commands
+      enabled: true
+      priority: 100
+      conditions:
+        tool_name: "^(Bash|mcp__.*__Bash)$"
+        tool_input:
+          command:
+            - pattern: 'rm\s+-rf\s+/'
+              message: "Recursive deletion at root"
+            - pattern: ':\s*\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:'
+              message: "Fork bomb detected"
+      decision: block
+      system_message: "Command blocked for security"
+
+    # Detect credential access
+    - name: detect-credential-access
+      description: Flag access to credential files
+      enabled: true
+      priority: 90
+      conditions:
+        tool_name: "^(Read|Bash)$"
+        tool_input:
+          command:
+            - pattern: '(\.env|credentials|secrets?|\.aws/|\.ssh/)'
+              message: "Accessing credential file"
+          file_path:
+            - pattern: '(\.env|credentials|secrets?\.)'
+              message: "Reading sensitive file"
+      decision: ask
+
+  PostToolUse:
+    # Detect leaked secrets in output
+    - name: detect-secret-leakage
+      description: Detect secrets in tool output
+      enabled: true
+      priority: 100
+      conditions:
+        tool_response:
+          - pattern: 'AKIA[0-9A-Z]{16}'
+            message: "AWS access key detected"
+          - pattern: '-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----'
+            message: "Private key detected"
+          - pattern: 'ghp_[a-zA-Z0-9]{36}'
+            message: "GitHub token detected"
+      decision: deny
+
+allowlist:
+  # Always allow reading common config files
+  - name: allow-config-reads
+    description: Allow reading standard config files
+    enabled: true
+    conditions:
+      tool_name: "^Read$"
+      tool_input:
+        file_path:
+          - pattern: '\.(yaml|yml|json|toml|ini|conf)$'
+    decision: allow
+
+  # Allow common development commands
+  - name: allow-dev-commands
+    description: Allow standard development commands
+    enabled: true
+    conditions:
+      tool_name: "^Bash$"
+      tool_input:
+        command:
+          - pattern: '^(go|npm|yarn|pip|cargo|make)\s+'
+    decision: allow

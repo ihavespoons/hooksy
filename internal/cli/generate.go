@@ -49,6 +49,11 @@ type HookCommand struct {
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
+	// Deprecation notice
+	fmt.Println("DEPRECATED: 'hooksy generate-hooks' is deprecated. Use 'hooksy setup' instead.")
+	fmt.Println("The setup command creates config and outputs Claude Code hooks in one step.")
+	fmt.Println("")
+
 	eventList := strings.Split(events, ",")
 
 	hookConfig := HookConfig{

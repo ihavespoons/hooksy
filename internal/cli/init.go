@@ -31,6 +31,11 @@ func init() {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
+	// Deprecation notice
+	fmt.Fprintln(os.Stderr, "DEPRECATED: 'hooksy init' is deprecated. Use 'hooksy setup' instead.")
+	fmt.Fprintln(os.Stderr, "The setup command creates config and outputs Claude Code hooks in one step.")
+	fmt.Fprintln(os.Stderr, "")
+
 	var configPath string
 
 	if initGlobal {
