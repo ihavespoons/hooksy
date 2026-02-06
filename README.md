@@ -1,6 +1,6 @@
 # Hooksy
 
-A security inspection tool for Claude Code hooks. Hooksy intercepts Claude Code hook events, evaluates them against configurable security rules using regex patterns, and returns structured decisions (allow/deny/block). It includes LLM-based analysis for semantic understanding and execution trace analysis for detecting suspicious behavioral patterns.
+A security inspection tool for Claude Code hooks. Hooksy intercepts Claude Code hook events, evaluates them against configurable security rules using regex patterns, and returns structured decisions (allow/deny/block). It includes LLM-based analysis for semantic understanding, execution trace analysis for detecting suspicious behavioral patterns, and a real-time web dashboard.
 
 ## Installation
 
@@ -78,6 +78,15 @@ hooksy trace list                           # List traced sessions
 hooksy trace show <session-id>              # Show events for a session
 hooksy trace clear --all                    # Clear all trace data
 hooksy trace analyze <transcript.jsonl>     # Analyze a transcript for suspicious patterns
+
+# Dashboard daemon
+hooksy daemon start              # Start in foreground
+hooksy daemon start --background # Start in background
+hooksy daemon stop               # Stop the running daemon
+hooksy daemon status             # Check if the daemon is running
+
+# Version information
+hooksy version
 ```
 
 ### Flags
@@ -102,6 +111,22 @@ version: "1"
 settings:
   log_level: info
   default_decision: allow  # allow, deny, or ask
+
+  trace:
+    enabled: true
+    storage_path: ""  # Default: ~/.hooksy/traces/sessions.db
+    session_ttl: 24h
+    max_events_per_session: 1000
+    cleanup_probability: 0.1
+
+    transcript_analysis:
+      enabled: true
+      risk_threshold: 0.3  # Minimum risk score to trigger action (0.0-1.0)
+
+  daemon:
+    enabled: false
+    port: 8741
+    auto_start: false
 
 rules:
   PreToolUse:
@@ -259,6 +284,22 @@ Detects:
 - **Obfuscation Attempts** - Encoding commands, evasion techniques
 - **Intent-Action Mismatches** - Saying one thing but doing another
 
+The transcript analyzer can be configured independently from trace storage:
+
+```yaml
+settings:
+  trace:
+    enabled: true
+    transcript_analysis:
+      enabled: true        # Enable/disable transcript pattern analysis
+      risk_threshold: 0.3  # Minimum risk score to trigger action (0.0-1.0)
+```
+
+The `risk_threshold` controls when the analyzer takes action:
+- **Below threshold** - Allowed, no action taken
+- **Threshold to threshold+0.3** - Ask (prompt user for approval)
+- **Above threshold+0.3** (capped at 0.9) - Deny
+
 ### Sequence Rules
 
 Sequence rules detect suspicious patterns across multiple events within a time window:
@@ -299,24 +340,50 @@ settings:
     storage_path: ""  # Default: ~/.hooksy/traces/sessions.db
     session_ttl: 24h
     max_events_per_session: 1000
+    cleanup_probability: 0.1
 ```
+
+## Dashboard
+
+Hooksy includes a real-time web dashboard for monitoring hook events, viewing session activity, and tracking rule violations.
+
+### Configuration
+
+```yaml
+settings:
+  daemon:
+    enabled: true
+    port: 8741       # Dashboard port
+    auto_start: false # Auto-start on first inspect
+```
+
+### Usage
+
+```bash
+hooksy daemon start              # Start in foreground
+hooksy daemon start --background # Run as background process
+hooksy daemon stop               # Stop the daemon
+hooksy daemon status             # Check status
+```
+
+The dashboard is accessible at `http://127.0.0.1:8741` (or your configured port).
 
 ## Hook Events
 
 Hooksy supports all Claude Code hook events:
 
-| Event | Description | Matcher Support |
-|-------|-------------|-----------------|
+| Event | Description | Rule Support |
+|-------|-------------|--------------|
 | `PreToolUse` | Before tool execution | Yes |
 | `PostToolUse` | After tool completion | Yes |
-| `UserPromptSubmit` | User prompt submission | No |
-| `Stop` | Main agent stopping | No |
-| `SubagentStop` | Subagent stopping | No |
-| `PermissionRequest` | Permission dialogs | Yes |
-| `Notification` | System notifications | Yes |
-| `SessionStart` | Session initialization | Yes |
-| `SessionEnd` | Session termination | No |
-| `PreCompact` | Before compacting | Yes |
+| `UserPromptSubmit` | User prompt submission | Yes |
+| `Stop` | Main agent stopping | LLM analysis only |
+| `SubagentStop` | Subagent stopping | Pass-through |
+| `Notification` | System notifications | Pass-through |
+| `SessionStart` | Session initialization | Trace initialization |
+| `SessionEnd` | Session termination | Trace cleanup |
+| `PermissionRequest` | Permission dialogs | Pass-through |
+| `PreCompact` | Before compacting | Pass-through |
 
 ## Decisions
 
@@ -357,10 +424,45 @@ Add to your Claude Code settings:
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooksy inspect --event UserPromptSubmit",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooksy inspect --event SessionStart",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooksy inspect --event SessionEnd",
+            "timeout": 30
+          }
+        ]
+      }
     ]
   }
 }
 ```
+
+Or generate this automatically with `hooksy generate-hooks`.
 
 ## Development
 
@@ -391,12 +493,13 @@ make release
 - [x] Transcript analysis for deception and behavioral pattern detection
 - [x] Sequence rules for cross-event correlation
 - [x] LLM response caching, rate limiting, and budget controls
+- [x] Real-time web dashboard with session monitoring
+- [x] Configurable transcript analysis with risk threshold
 
 ### Planned
 
 - [ ] Rule inheritance and composition
 - [ ] Metrics and audit logging
-- [ ] Web dashboard for rule management
 - [ ] Enhanced prompt templates with few-shot examples
 
 ## License

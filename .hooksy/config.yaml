@@ -11,6 +11,9 @@ settings:
         session_ttl: 24h
         max_events_per_session: 1000
         cleanup_probability: 0.1
+	transcript_analysis:
+              enabled: true
+              risk_threshold: 0.5  # Minimum risk score to trigger action (0.0-1.0)
 
 # LLM-based analysis configuration
 llm:
@@ -88,7 +91,7 @@ rules:
                 file_path:
                     - pattern: \.hooksy/
                       message: Modification of hooksy configuration is not allowed
-                    - pattern: hooksy.*\.ya?ml$
+                    - pattern: (^|/)hooksy[^/]*\.ya?ml$
                       message: Modification of hooksy configuration is not allowed
           decision: deny
         - name: block-dangerous-commands
