@@ -25,7 +25,6 @@ llm:
     providers:
         claude_cli:
             enabled: true
-            binary_path: /home/beng/.local/share/mise/installs/node/25.2.1/bin/claude
             model: ""        # Use CLI default
             max_tokens: 1024
 
@@ -167,3 +166,60 @@ allowlist:
                 - pattern: Cargo\.toml$
                 - pattern: pyproject\.toml$
       decision: allow
+sequence_rules:
+      - name: credential-then-network
+        description: Detect network requests after reading credential files
+        enabled: true
+        severity: critical
+        window: 5m
+        events:
+            - event_type: PostToolUse
+              tool_name: "^Read$"
+              tool_input:
+                  file_path: '\.(env|key|pem|crt|p12|pfx)$'
+              label: credential_read
+            - event_type: PreToolUse
+              tool_name: "^Bash$"
+              tool_input:
+                  command: "(curl|wget|nc|ncat).*"
+              after: credential_read
+        decision: deny
+        message: "Network request detected after credential file access"
+
+      - name: rapid-file-exfiltration
+        description: Detect bulk reading of sensitive files followed by network activity
+        enabled: true
+        severity: critical
+        window: 10m
+        events:
+            - event_type: PostToolUse
+              tool_name: "^Read$"
+              tool_input:
+                  file_path: '(/\.ssh/|/\.aws/|/\.gnupg/|id_rsa|id_ed25519)'
+              label: sensitive_read
+            - event_type: PreToolUse
+              tool_name: "^Bash$"
+              tool_input:
+                  command: "(curl|wget|scp|rsync|nc|base64).*"
+              after: sensitive_read
+        decision: block
+        message: "Potential data exfiltration - network/encoding activity after sensitive file access"
+
+      - name: config-tampering-sequence
+        description: Detect attempts to disable security then perform risky actions
+        enabled: true
+        severity: critical
+        window: 5m
+        events:
+            - event_type: PreToolUse
+              tool_name: "^(Write|Edit)$"
+              tool_input:
+                  file_path: '(\.hooksy/|\.claude/)'
+              label: config_modify
+            - event_type: PreToolUse
+              tool_name: "^Bash$"
+              tool_input:
+                  command: "(rm|curl|wget|chmod|ssh).*"
+              after: config_modify
+        decision: deny
+        message: "Risky command detected after configuration modification attempt"

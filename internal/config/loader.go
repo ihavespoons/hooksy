@@ -186,6 +186,24 @@ func mergeTraceSettings(base, override TraceSettings) TraceSettings {
 		result.CleanupProbability = override.CleanupProbability
 	}
 
+	result.TranscriptAnalysis = mergeTranscriptAnalysisSettings(base.TranscriptAnalysis, override.TranscriptAnalysis)
+
+	return result
+}
+
+// mergeTranscriptAnalysisSettings merges transcript analysis settings
+func mergeTranscriptAnalysisSettings(base, override TranscriptAnalysisSettings) TranscriptAnalysisSettings {
+	result := base
+
+	// Override Enabled if any transcript analysis settings are configured
+	if override.Enabled || override.RiskThreshold != 0 {
+		result.Enabled = override.Enabled
+	}
+
+	if override.RiskThreshold != 0 {
+		result.RiskThreshold = override.RiskThreshold
+	}
+
 	return result
 }
 

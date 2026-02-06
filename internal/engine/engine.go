@@ -41,7 +41,7 @@ func NewEngineWithTracing(cfg *config.Config, store trace.SessionStore) *Engine 
 		store:     store,
 	}
 	if store != nil && len(cfg.SequenceRules) > 0 {
-		e.analyzer = trace.NewAnalyzer(store, cfg.SequenceRules)
+		e.analyzer = trace.NewAnalyzer(store, cfg.SequenceRules, cfg.Settings.Trace.TranscriptAnalysis)
 	}
 	return e
 }
@@ -72,7 +72,7 @@ func NewEngineWithLLMAndTracing(cfg *config.Config, llmManager *llm.Manager, sto
 	}
 
 	if store != nil && len(cfg.SequenceRules) > 0 {
-		e.analyzer = trace.NewAnalyzer(store, cfg.SequenceRules)
+		e.analyzer = trace.NewAnalyzer(store, cfg.SequenceRules, cfg.Settings.Trace.TranscriptAnalysis)
 	}
 
 	if llmManager != nil && cfg.LLM != nil && cfg.LLM.Enabled {
@@ -86,7 +86,7 @@ func NewEngineWithLLMAndTracing(cfg *config.Config, llmManager *llm.Manager, sto
 func (e *Engine) SetStore(store trace.SessionStore) {
 	e.store = store
 	if store != nil && len(e.cfg.SequenceRules) > 0 {
-		e.analyzer = trace.NewAnalyzer(store, e.cfg.SequenceRules)
+		e.analyzer = trace.NewAnalyzer(store, e.cfg.SequenceRules, e.cfg.Settings.Trace.TranscriptAnalysis)
 	}
 }
 

@@ -26,11 +26,18 @@ type Settings struct {
 
 // TraceSettings configures the trace analysis feature
 type TraceSettings struct {
-	Enabled             bool    `yaml:"enabled"`
-	StoragePath         string  `yaml:"storage_path,omitempty"`
-	SessionTTL          string  `yaml:"session_ttl,omitempty"`
-	MaxEventsPerSession int     `yaml:"max_events_per_session,omitempty"`
-	CleanupProbability  float64 `yaml:"cleanup_probability,omitempty"`
+	Enabled              bool                        `yaml:"enabled"`
+	StoragePath          string                      `yaml:"storage_path,omitempty"`
+	SessionTTL           string                      `yaml:"session_ttl,omitempty"`
+	MaxEventsPerSession  int                         `yaml:"max_events_per_session,omitempty"`
+	CleanupProbability   float64                     `yaml:"cleanup_probability,omitempty"`
+	TranscriptAnalysis   TranscriptAnalysisSettings  `yaml:"transcript_analysis,omitempty"`
+}
+
+// TranscriptAnalysisSettings configures the transcript analyzer
+type TranscriptAnalysisSettings struct {
+	Enabled       bool    `yaml:"enabled"`
+	RiskThreshold float64 `yaml:"risk_threshold,omitempty"`
 }
 
 // DaemonSettings configures the dashboard daemon
@@ -49,6 +56,14 @@ func DefaultDaemonSettings() DaemonSettings {
 	}
 }
 
+// DefaultTranscriptAnalysisSettings returns the default transcript analysis settings
+func DefaultTranscriptAnalysisSettings() TranscriptAnalysisSettings {
+	return TranscriptAnalysisSettings{
+		Enabled:       true,
+		RiskThreshold: 0.3,
+	}
+}
+
 // DefaultTraceSettings returns the default trace settings
 func DefaultTraceSettings() TraceSettings {
 	return TraceSettings{
@@ -57,6 +72,7 @@ func DefaultTraceSettings() TraceSettings {
 		SessionTTL:          "24h",
 		MaxEventsPerSession: 1000,
 		CleanupProbability:  0.1,
+		TranscriptAnalysis:  DefaultTranscriptAnalysisSettings(),
 	}
 }
 

@@ -15,21 +15,27 @@ import (
 
 // Analyzer performs cross-event pattern detection
 type Analyzer struct {
-	store              SessionStore
-	rules              []config.SequenceRule
-	regexCache         sync.Map
-	intentChecker      *IntentChecker
-	transcriptAnalyzer *TranscriptAnalyzer
-	transcriptCache    sync.Map // sessionID -> *TranscriptAnalysis
+	store                      SessionStore
+	rules                      []config.SequenceRule
+	regexCache                 sync.Map
+	intentChecker              *IntentChecker
+	transcriptAnalyzer         *TranscriptAnalyzer
+	transcriptAnalysisSettings config.TranscriptAnalysisSettings
+	transcriptCache            sync.Map // sessionID -> *TranscriptAnalysis
 }
 
 // NewAnalyzer creates a new pattern analyzer
-func NewAnalyzer(store SessionStore, rules []config.SequenceRule) *Analyzer {
+func NewAnalyzer(store SessionStore, rules []config.SequenceRule, transcriptSettings config.TranscriptAnalysisSettings) *Analyzer {
+	var ta *TranscriptAnalyzer
+	if transcriptSettings.Enabled {
+		ta = NewTranscriptAnalyzer()
+	}
 	return &Analyzer{
-		store:              store,
-		rules:              rules,
-		intentChecker:      NewIntentChecker(store),
-		transcriptAnalyzer: NewTranscriptAnalyzer(),
+		store:                      store,
+		rules:                      rules,
+		intentChecker:              NewIntentChecker(store),
+		transcriptAnalyzer:         ta,
+		transcriptAnalysisSettings: transcriptSettings,
 	}
 }
 
@@ -127,8 +133,18 @@ func (a *Analyzer) checkTranscript(sessionID, transcriptPath string, eventType h
 
 // transcriptAnalysisToOutput converts transcript analysis to a HookOutput
 func (a *Analyzer) transcriptAnalysisToOutput(analysis *TranscriptAnalysis, eventType hooks.EventType) *hooks.HookOutput {
-	if analysis.RiskScore < 0.3 {
-		return nil // Low risk, no action needed
+	askThreshold := a.transcriptAnalysisSettings.RiskThreshold
+	if askThreshold <= 0 {
+		askThreshold = 0.3
+	}
+	// Deny threshold is the ask threshold + 0.3, capped at 0.9
+	denyThreshold := askThreshold + 0.3
+	if denyThreshold > 0.9 {
+		denyThreshold = 0.9
+	}
+
+	if analysis.RiskScore < askThreshold {
+		return nil // Below risk threshold, no action needed
 	}
 
 	// Build reason message
@@ -151,7 +167,7 @@ func (a *Analyzer) transcriptAnalysisToOutput(analysis *TranscriptAnalysis, even
 		strings.Join(reasons, ", "))
 
 	// High risk -> deny, medium risk -> ask
-	if analysis.RiskScore >= 0.6 {
+	if analysis.RiskScore >= denyThreshold {
 		logger.Warn().
 			Float64("risk", analysis.RiskScore).
 			Str("summary", analysis.Summary).

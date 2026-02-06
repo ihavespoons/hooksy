@@ -18,7 +18,7 @@ func setupTestAnalyzer(t *testing.T, rules []config.SequenceRule) (*Analyzer, *S
 		t.Fatalf("Failed to create store: %v", err)
 	}
 
-	analyzer := NewAnalyzer(store, rules)
+	analyzer := NewAnalyzer(store, rules, config.DefaultTranscriptAnalysisSettings())
 
 	return analyzer, store, func() {
 		_ = store.Close()
