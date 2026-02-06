@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/ihavespoons/hooksy/internal/config"
@@ -49,7 +48,7 @@ func (l *Lifecycle) IsRunning() bool {
 	}
 
 	// On Unix, FindProcess always succeeds, so we need to send signal 0 to check
-	err = process.Signal(syscall.Signal(0))
+	err = signalProcess(process, checkAlive())
 	if err != nil {
 		// Process doesn't exist, clean up stale PID file
 		_ = os.Remove(l.pidFile)
@@ -86,10 +85,8 @@ func (l *Lifecycle) StartInBackground() error {
 	cmd.Stderr = nil
 	cmd.Stdin = nil
 
-	// Detach from parent process
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true,
-	}
+	// Detach from parent process (platform-specific)
+	setSysProcAttr(cmd)
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start daemon: %w", err)
@@ -118,15 +115,15 @@ func (l *Lifecycle) Stop() error {
 		return fmt.Errorf("failed to find process: %w", err)
 	}
 
-	// Send SIGTERM for graceful shutdown
-	if err := process.Signal(syscall.SIGTERM); err != nil {
+	// Send termination signal for graceful shutdown
+	if err := signalProcess(process, termSignal()); err != nil {
 		return fmt.Errorf("failed to stop daemon: %w", err)
 	}
 
 	// Wait for process to exit (with timeout)
 	for range 30 {
 		time.Sleep(100 * time.Millisecond)
-		if err := process.Signal(syscall.Signal(0)); err != nil {
+		if err := signalProcess(process, checkAlive()); err != nil {
 			// Process has exited
 			_ = os.Remove(l.pidFile)
 			return nil
