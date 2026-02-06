@@ -1,0 +1,30 @@
+version: "1"
+
+settings:
+  log_level: info
+  default_decision: allow
+
+  trace:
+    enabled: true
+    storage_path: ""
+    session_ttl: 24h
+    max_events_per_session: 1000
+    cleanup_probability: 0.0
+
+    transcript_analysis:
+      enabled: true
+      risk_threshold: 0.3
+
+rules:
+  PreToolUse:
+    - name: block-rm-rf
+      description: Block rm -rf /
+      enabled: true
+      priority: 100
+      conditions:
+        tool_name: "^Bash$"
+        tool_input:
+          command:
+            - pattern: 'rm\s+-rf\s+/'
+              message: Recursive deletion blocked
+      decision: deny

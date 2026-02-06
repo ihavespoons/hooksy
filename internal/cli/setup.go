@@ -199,6 +199,13 @@ func printProfileFeatures(cfg *config.Config) {
 		fmt.Println("  - Tracing: disabled")
 	}
 
+	// Transcript analysis
+	if cfg.Settings.Trace.TranscriptAnalysis.Enabled {
+		fmt.Printf("  - Transcript analysis: enabled (risk threshold: %.1f)\n", cfg.Settings.Trace.TranscriptAnalysis.RiskThreshold)
+	} else {
+		fmt.Println("  - Transcript analysis: disabled")
+	}
+
 	// Sequence rules
 	if len(cfg.SequenceRules) > 0 {
 		var ruleNames []string

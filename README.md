@@ -30,29 +30,36 @@ make build
 
 ## Quick Start
 
-1. Initialize configuration:
+Run the unified setup command:
 
 ```bash
-hooksy init
+hooksy setup
 ```
 
-2. Generate Claude Code hook configuration:
+This creates a hooksy config and outputs the Claude Code hooks JSON to add to your settings (`~/.claude/settings.json` or `.claude/settings.json`).
+
+For comprehensive security with tracing and sequence rules:
 
 ```bash
-hooksy generate-hooks
+hooksy setup --comprehensive
 ```
-
-3. Add the generated hooks to your Claude Code settings (`~/.claude/settings.json` or `.claude/settings.json`).
 
 ## Usage
 
 ### Commands
 
 ```bash
+# Unified setup (creates config + outputs Claude Code hooks JSON)
+hooksy setup                                # Default profile, project config
+hooksy setup --comprehensive                # Tracing + sequence rules
+hooksy setup --profile strict               # Strict security profile
+hooksy setup --global                       # Write to ~/.hooksy/config.yaml
+hooksy setup --force                        # Overwrite existing config
+
 # Inspect a hook event (called by Claude Code)
 hooksy inspect --event PreToolUse
 
-# Initialize configuration
+# Initialize configuration (legacy, prefer setup)
 hooksy init           # Project-level (.hooksy/config.yaml)
 hooksy init --global  # Global (~/.hooksy/config.yaml)
 

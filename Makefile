@@ -13,12 +13,7 @@ test:
 	go test -v ./...
 
 test-integration:
-	@echo "Testing dangerous command detection..."
-	@echo '{"tool_name": "Bash", "tool_input": {"command": "rm -rf /"}}' | ./$(BINARY_NAME) inspect --event PreToolUse --config configs/default.yaml | grep -q '"permissionDecision":"deny"' && echo "PASS: Dangerous command blocked" || echo "FAIL"
-	@echo "Testing safe command..."
-	@echo '{"tool_name": "Bash", "tool_input": {"command": "ls -la"}}' | ./$(BINARY_NAME) inspect --event PreToolUse --config configs/default.yaml | grep -q '"permissionDecision":"allow"' && echo "PASS: Safe command allowed" || echo "FAIL"
-	@echo "Testing secret detection..."
-	@echo '{"tool_name": "Bash", "tool_response": {"output": "AKIAIOSFODNN7EXAMPLE"}}' | ./$(BINARY_NAME) inspect --event PostToolUse --config configs/default.yaml | grep -q '"continue":false' && echo "PASS: Secret blocked" || echo "FAIL"
+	go test -v ./test/integration/... -count=1
 
 clean:
 	rm -f $(BINARY_NAME)

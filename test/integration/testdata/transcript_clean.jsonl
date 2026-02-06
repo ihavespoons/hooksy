@@ -1,0 +1,4 @@
+{"type":"user","role":"user","content":[{"type":"text","text":"Please list the files in the current directory"}]}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I'll list the files in the current directory for you."},{"type":"tool_use","id":"tool_1","name":"Bash","input":{"command":"ls -la"}}]}}
+{"type":"tool_result","tool_use_id":"tool_1","tool_name":"Bash","tool_result":"total 8\ndrwxr-xr-x  4 user staff 128 Jan  1 00:00 .\ndrwxr-xr-x  3 user staff  96 Jan  1 00:00 ..\n-rw-r--r--  1 user staff  42 Jan  1 00:00 README.md\n-rw-r--r--  1 user staff 100 Jan  1 00:00 main.go"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"The directory contains two files: README.md and main.go."}]}}
