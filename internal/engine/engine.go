@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -479,12 +481,62 @@ func (e *Engine) inspectSessionStart(inputJSON []byte) (*hooks.HookOutput, error
 			logger.Debug().Err(err).Msg("Failed to create session for tracing")
 		}
 
+		// Store rules snapshot for this session if rules have changed
+		e.storeSessionRulesIfChanged(input.SessionID)
+
 		// Probabilistically run cleanup
 		trace.MaybeRunCleanup(e.store, e.cfg.Settings.Trace)
 	}
 
 	// SessionStart doesn't support hookSpecificOutput per Claude Code schema
 	return hooks.NewStopAllowOutput(), nil
+}
+
+// storeSessionRulesIfChanged stores rules for a session if they've changed
+func (e *Engine) storeSessionRulesIfChanged(sessionID string) {
+	if e.store == nil || e.cfg == nil {
+		return
+	}
+
+	// Compute hash of current rules
+	rulesHash := e.computeRulesHash()
+
+	// Check if rules have changed
+	existingRules, err := e.store.GetSessionRules(sessionID)
+	if err != nil {
+		logger.Debug().Err(err).Msg("Failed to get existing session rules")
+	}
+
+	// Only store if rules are new or changed
+	if existingRules == nil || existingRules.RulesHash != rulesHash {
+		if err := e.store.StoreSessionRules(sessionID, &e.cfg.Rules, e.cfg.SequenceRules); err != nil {
+			logger.Debug().Err(err).Msg("Failed to store session rules")
+		} else {
+			logger.Debug().
+				Str("session", sessionID).
+				Str("hash", rulesHash).
+				Msg("Stored updated session rules")
+		}
+	}
+}
+
+// computeRulesHash computes a hash of the current rules configuration
+func (e *Engine) computeRulesHash() string {
+	rulesData := struct {
+		Rules         config.Rules           `json:"rules"`
+		SequenceRules []config.SequenceRule `json:"sequence_rules"`
+	}{
+		Rules:         e.cfg.Rules,
+		SequenceRules: e.cfg.SequenceRules,
+	}
+
+	data, err := json.Marshal(rulesData)
+	if err != nil {
+		return ""
+	}
+
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
 }
 
 func (e *Engine) inspectSessionEnd(inputJSON []byte) (*hooks.HookOutput, error) {

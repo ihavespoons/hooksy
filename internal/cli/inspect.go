@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/ihavespoons/hooksy/internal/config"
+	"github.com/ihavespoons/hooksy/internal/daemon"
 	"github.com/ihavespoons/hooksy/internal/engine"
 	"github.com/ihavespoons/hooksy/internal/hooks"
 	"github.com/ihavespoons/hooksy/internal/llm"
@@ -76,6 +77,18 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	}
 
 	logger.Debug().Msg("Config loaded successfully")
+
+	// Auto-start daemon if enabled
+	if cfg.Settings.Daemon.Enabled && cfg.Settings.Daemon.AutoStart {
+		lifecycle := daemon.NewLifecycle(cfg.Settings.Daemon)
+		if !lifecycle.IsRunning() {
+			if err := lifecycle.StartInBackground(); err != nil {
+				logger.Debug().Err(err).Msg("Failed to auto-start daemon")
+			} else {
+				logger.Debug().Int("port", lifecycle.Port()).Msg("Auto-started daemon")
+			}
+		}
+	}
 
 	// Read input from stdin
 	inputJSON, err := io.ReadAll(os.Stdin)

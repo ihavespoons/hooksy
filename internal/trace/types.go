@@ -3,6 +3,7 @@ package trace
 import (
 	"time"
 
+	"github.com/ihavespoons/hooksy/internal/config"
 	"github.com/ihavespoons/hooksy/internal/hooks"
 )
 
@@ -38,4 +39,14 @@ type PatternMatch struct {
 	Message     string
 	Events      []*Event // Events that matched the pattern
 	Window      time.Duration
+}
+
+// SessionRulesSnapshot stores a snapshot of rules for a session
+type SessionRulesSnapshot struct {
+	ID            int64
+	SessionID     string
+	Rules         *config.Rules
+	SequenceRules []config.SequenceRule
+	RulesHash     string
+	CreatedAt     time.Time
 }

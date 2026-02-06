@@ -66,6 +66,24 @@ func (l *Loader) Load() (*Config, error) {
 	return cfg, nil
 }
 
+// LoadGlobalOnly loads configuration from global config only, ignoring project config.
+// This is used for daemon commands where project-specific config should not apply.
+func (l *Loader) LoadGlobalOnly() (*Config, error) {
+	// Start with defaults
+	cfg := DefaultConfig()
+
+	// Load global config if exists
+	globalCfg, err := l.loadFile(l.globalPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to load global config: %w", err)
+	}
+	if globalCfg != nil {
+		cfg = mergeConfigs(cfg, globalCfg)
+	}
+
+	return cfg, nil
+}
+
 // LoadFromFile loads configuration from a specific file
 func (l *Loader) LoadFromFile(path string) (*Config, error) {
 	return l.loadFile(path)
@@ -94,6 +112,7 @@ func mergeConfigs(base, override *Config) *Config {
 			LogFile:         coalesce(override.Settings.LogFile, base.Settings.LogFile),
 			DefaultDecision: coalesce(override.Settings.DefaultDecision, base.Settings.DefaultDecision),
 			Trace:           mergeTraceSettings(base.Settings.Trace, override.Settings.Trace),
+			Daemon:          mergeDaemonSettings(base.Settings.Daemon, override.Settings.Daemon),
 		},
 		Rules: Rules{
 			PreToolUse:       mergeRules(base.Rules.PreToolUse, override.Rules.PreToolUse),
@@ -118,6 +137,25 @@ func mergeConfigs(base, override *Config) *Config {
 		result.LLM = override.LLM
 	} else {
 		result.LLM = base.LLM
+	}
+
+	return result
+}
+
+// mergeDaemonSettings merges daemon settings, with override taking precedence for set values
+func mergeDaemonSettings(base, override DaemonSettings) DaemonSettings {
+	result := base
+
+	// Override Enabled if explicitly set in override config
+	// Since we can't distinguish "not set" from "set to false" for bool,
+	// we check if any daemon settings are configured in override
+	if override.Enabled || override.Port != 0 || override.AutoStart {
+		result.Enabled = override.Enabled
+		result.AutoStart = override.AutoStart
+	}
+
+	if override.Port != 0 {
+		result.Port = override.Port
 	}
 
 	return result

@@ -17,10 +17,11 @@ type Config struct {
 
 // Settings contains global configuration settings
 type Settings struct {
-	LogLevel        string        `yaml:"log_level"`
-	LogFile         string        `yaml:"log_file,omitempty"`
-	DefaultDecision string        `yaml:"default_decision"`
-	Trace           TraceSettings `yaml:"trace,omitempty"`
+	LogLevel        string         `yaml:"log_level"`
+	LogFile         string         `yaml:"log_file,omitempty"`
+	DefaultDecision string         `yaml:"default_decision"`
+	Trace           TraceSettings  `yaml:"trace,omitempty"`
+	Daemon          DaemonSettings `yaml:"daemon,omitempty"`
 }
 
 // TraceSettings configures the trace analysis feature
@@ -30,6 +31,22 @@ type TraceSettings struct {
 	SessionTTL          string  `yaml:"session_ttl,omitempty"`
 	MaxEventsPerSession int     `yaml:"max_events_per_session,omitempty"`
 	CleanupProbability  float64 `yaml:"cleanup_probability,omitempty"`
+}
+
+// DaemonSettings configures the dashboard daemon
+type DaemonSettings struct {
+	Enabled   bool `yaml:"enabled"`
+	Port      int  `yaml:"port,omitempty"`
+	AutoStart bool `yaml:"auto_start,omitempty"`
+}
+
+// DefaultDaemonSettings returns the default daemon settings
+func DefaultDaemonSettings() DaemonSettings {
+	return DaemonSettings{
+		Enabled:   false,
+		Port:      8741,
+		AutoStart: false,
+	}
 }
 
 // DefaultTraceSettings returns the default trace settings
@@ -155,6 +172,7 @@ func DefaultConfig() *Config {
 			LogLevel:        "info",
 			DefaultDecision: "allow",
 			Trace:           DefaultTraceSettings(),
+			Daemon:          DefaultDaemonSettings(),
 		},
 		Rules: Rules{
 			PreToolUse: []Rule{

@@ -1,7 +1,9 @@
 package trace
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -31,6 +33,12 @@ type SessionStore interface {
 	GetSessionEvents(sessionID string, since time.Time) ([]*Event, error)
 	GetEventByToolUseID(sessionID, toolUseID string) (*Event, error)
 	GetRecentEvents(sessionID string, limit int) ([]*Event, error)
+	GetEventByID(eventID int64) (*Event, error)
+	GetFilteredEvents(opts EventFilterOptions) ([]*Event, error)
+
+	// Session rules management
+	StoreSessionRules(sessionID string, rules *config.Rules, sequenceRules []config.SequenceRule) error
+	GetSessionRules(sessionID string) (*SessionRulesSnapshot, error)
 
 	// Cleanup
 	CleanupOldSessions(ttl time.Duration) (int64, error)
@@ -38,6 +46,17 @@ type SessionStore interface {
 
 	// Lifecycle
 	Close() error
+}
+
+// EventFilterOptions defines options for filtering events
+type EventFilterOptions struct {
+	SessionID string
+	EventType string
+	Decision  string
+	ToolName  string
+	SortOrder string // "asc" or "desc"
+	Limit     int
+	Since     time.Time
 }
 
 // SQLiteStore implements SessionStore using SQLite
@@ -93,7 +112,8 @@ func (s *SQLiteStore) initSchema() error {
 		created_at INTEGER NOT NULL,
 		last_seen_at INTEGER NOT NULL,
 		cwd TEXT,
-		transcript_path TEXT
+		transcript_path TEXT,
+		rules_hash TEXT
 	);
 
 	CREATE TABLE IF NOT EXISTS events (
@@ -112,10 +132,28 @@ func (s *SQLiteStore) initSchema() error {
 
 	CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, timestamp);
 	CREATE INDEX IF NOT EXISTS idx_events_tool_use_id ON events(tool_use_id);
+
+	CREATE TABLE IF NOT EXISTS session_rules (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_id TEXT NOT NULL,
+		rules_json TEXT NOT NULL,
+		rules_hash TEXT NOT NULL,
+		created_at INTEGER NOT NULL,
+		FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_session_rules_session ON session_rules(session_id);
 	`
 
 	_, err := s.db.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Add rules_hash column to sessions if it doesn't exist (migration for existing DBs)
+	_, _ = s.db.Exec(`ALTER TABLE sessions ADD COLUMN rules_hash TEXT`)
+
+	return nil
 }
 
 // GetOrCreateSession retrieves an existing session or creates a new one
@@ -411,6 +449,202 @@ func (s *SQLiteStore) GetRecentEvents(sessionID string, limit int) ([]*Event, er
 	return events, nil
 }
 
+// GetEventByID retrieves a single event by its ID
+func (s *SQLiteStore) GetEventByID(eventID int64) (*Event, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var event Event
+	var timestamp int64
+	var toolInputJSON, toolResponseJSON sql.NullString
+	var toolUseID, toolName, decision, ruleMatched sql.NullString
+	var eventType string
+
+	err := s.db.QueryRow(
+		`SELECT id, session_id, tool_use_id, event_type, tool_name, tool_input, tool_response, timestamp, decision, rule_matched
+		 FROM events
+		 WHERE id = ?`,
+		eventID,
+	).Scan(&event.ID, &event.SessionID, &toolUseID, &eventType, &toolName, &toolInputJSON, &toolResponseJSON, &timestamp, &decision, &ruleMatched)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("event not found with id: %d", eventID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get event: %w", err)
+	}
+
+	event.EventType = hooks.EventType(eventType)
+	event.ToolUseID = toolUseID.String
+	event.ToolName = toolName.String
+	event.Decision = decision.String
+	event.RuleMatched = ruleMatched.String
+	event.Timestamp = time.Unix(timestamp, 0)
+
+	if toolInputJSON.Valid && toolInputJSON.String != "" {
+		if err := json.Unmarshal([]byte(toolInputJSON.String), &event.ToolInput); err != nil {
+			logger.Debug().Err(err).Msg("Failed to unmarshal tool_input")
+		}
+	}
+
+	if toolResponseJSON.Valid && toolResponseJSON.String != "" {
+		if err := json.Unmarshal([]byte(toolResponseJSON.String), &event.ToolResponse); err != nil {
+			logger.Debug().Err(err).Msg("Failed to unmarshal tool_response")
+		}
+	}
+
+	return &event, nil
+}
+
+// GetFilteredEvents retrieves events with optional filtering and sorting
+func (s *SQLiteStore) GetFilteredEvents(opts EventFilterOptions) ([]*Event, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `SELECT id, session_id, tool_use_id, event_type, tool_name, tool_input, tool_response, timestamp, decision, rule_matched FROM events WHERE 1=1`
+	args := []any{}
+
+	if opts.SessionID != "" {
+		query += " AND session_id = ?"
+		args = append(args, opts.SessionID)
+	}
+
+	if opts.EventType != "" {
+		query += " AND event_type = ?"
+		args = append(args, opts.EventType)
+	}
+
+	if opts.Decision != "" {
+		query += " AND decision = ?"
+		args = append(args, opts.Decision)
+	}
+
+	if opts.ToolName != "" {
+		query += " AND tool_name LIKE ?"
+		args = append(args, "%"+opts.ToolName+"%")
+	}
+
+	if !opts.Since.IsZero() {
+		query += " AND timestamp >= ?"
+		args = append(args, opts.Since.Unix())
+	}
+
+	// Sort order
+	if opts.SortOrder == "asc" {
+		query += " ORDER BY timestamp ASC"
+	} else {
+		query += " ORDER BY timestamp DESC"
+	}
+
+	// Limit
+	if opts.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, opts.Limit)
+	}
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get filtered events: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return s.scanEvents(rows)
+}
+
+// StoreSessionRules stores the rules configuration for a session
+func (s *SQLiteStore) StoreSessionRules(sessionID string, rules *config.Rules, sequenceRules []config.SequenceRule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Serialize rules to JSON
+	rulesData := struct {
+		Rules         *config.Rules           `json:"rules"`
+		SequenceRules []config.SequenceRule `json:"sequence_rules"`
+	}{
+		Rules:         rules,
+		SequenceRules: sequenceRules,
+	}
+
+	rulesJSON, err := json.Marshal(rulesData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal rules: %w", err)
+	}
+
+	// Compute hash of the rules
+	rulesHash := computeHash(rulesJSON)
+
+	now := time.Now().Unix()
+
+	// Insert the rules snapshot
+	_, err = s.db.Exec(
+		`INSERT INTO session_rules (session_id, rules_json, rules_hash, created_at)
+		 VALUES (?, ?, ?, ?)`,
+		sessionID, string(rulesJSON), rulesHash, now,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to store session rules: %w", err)
+	}
+
+	// Update the session's rules_hash
+	_, err = s.db.Exec(
+		`UPDATE sessions SET rules_hash = ? WHERE session_id = ?`,
+		rulesHash, sessionID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update session rules_hash: %w", err)
+	}
+
+	logger.Debug().
+		Str("session", sessionID).
+		Str("hash", rulesHash).
+		Msg("Stored session rules")
+
+	return nil
+}
+
+// GetSessionRules retrieves the most recent rules snapshot for a session
+func (s *SQLiteStore) GetSessionRules(sessionID string) (*SessionRulesSnapshot, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var snapshot SessionRulesSnapshot
+	var rulesJSON string
+	var createdAt int64
+
+	err := s.db.QueryRow(
+		`SELECT id, session_id, rules_json, rules_hash, created_at
+		 FROM session_rules
+		 WHERE session_id = ?
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
+		sessionID,
+	).Scan(&snapshot.ID, &snapshot.SessionID, &rulesJSON, &snapshot.RulesHash, &createdAt)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // No rules stored for this session
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session rules: %w", err)
+	}
+
+	snapshot.CreatedAt = time.Unix(createdAt, 0)
+
+	// Deserialize rules
+	var rulesData struct {
+		Rules         *config.Rules           `json:"rules"`
+		SequenceRules []config.SequenceRule `json:"sequence_rules"`
+	}
+
+	if err := json.Unmarshal([]byte(rulesJSON), &rulesData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal rules: %w", err)
+	}
+
+	snapshot.Rules = rulesData.Rules
+	snapshot.SequenceRules = rulesData.SequenceRules
+
+	return &snapshot, nil
+}
+
 func (s *SQLiteStore) scanEvents(rows *sql.Rows) ([]*Event, error) {
 	var events []*Event
 
@@ -522,6 +756,12 @@ func (s *SQLiteStore) CleanupExcessEvents(sessionID string, maxEvents int) (int6
 // Close closes the database connection
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
+}
+
+// computeHash computes a SHA256 hash of the given data
+func computeHash(data []byte) string {
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
 }
 
 // MaybeRunCleanup runs cleanup with the given probability
