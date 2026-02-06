@@ -17,19 +17,51 @@ type Config struct {
 
 // Settings contains global configuration settings
 type Settings struct {
-	LogLevel        string        `yaml:"log_level"`
-	LogFile         string        `yaml:"log_file,omitempty"`
-	DefaultDecision string        `yaml:"default_decision"`
-	Trace           TraceSettings `yaml:"trace,omitempty"`
+	LogLevel        string         `yaml:"log_level"`
+	LogFile         string         `yaml:"log_file,omitempty"`
+	DefaultDecision string         `yaml:"default_decision"`
+	Trace           TraceSettings  `yaml:"trace,omitempty"`
+	Daemon          DaemonSettings `yaml:"daemon,omitempty"`
 }
 
 // TraceSettings configures the trace analysis feature
 type TraceSettings struct {
-	Enabled             bool    `yaml:"enabled"`
-	StoragePath         string  `yaml:"storage_path,omitempty"`
-	SessionTTL          string  `yaml:"session_ttl,omitempty"`
-	MaxEventsPerSession int     `yaml:"max_events_per_session,omitempty"`
-	CleanupProbability  float64 `yaml:"cleanup_probability,omitempty"`
+	Enabled              bool                        `yaml:"enabled"`
+	StoragePath          string                      `yaml:"storage_path,omitempty"`
+	SessionTTL           string                      `yaml:"session_ttl,omitempty"`
+	MaxEventsPerSession  int                         `yaml:"max_events_per_session,omitempty"`
+	CleanupProbability   float64                     `yaml:"cleanup_probability,omitempty"`
+	TranscriptAnalysis   TranscriptAnalysisSettings  `yaml:"transcript_analysis,omitempty"`
+}
+
+// TranscriptAnalysisSettings configures the transcript analyzer
+type TranscriptAnalysisSettings struct {
+	Enabled       bool    `yaml:"enabled"`
+	RiskThreshold float64 `yaml:"risk_threshold,omitempty"`
+}
+
+// DaemonSettings configures the dashboard daemon
+type DaemonSettings struct {
+	Enabled   bool `yaml:"enabled"`
+	Port      int  `yaml:"port,omitempty"`
+	AutoStart bool `yaml:"auto_start,omitempty"`
+}
+
+// DefaultDaemonSettings returns the default daemon settings
+func DefaultDaemonSettings() DaemonSettings {
+	return DaemonSettings{
+		Enabled:   false,
+		Port:      8741,
+		AutoStart: false,
+	}
+}
+
+// DefaultTranscriptAnalysisSettings returns the default transcript analysis settings
+func DefaultTranscriptAnalysisSettings() TranscriptAnalysisSettings {
+	return TranscriptAnalysisSettings{
+		Enabled:       true,
+		RiskThreshold: 0.3,
+	}
 }
 
 // DefaultTraceSettings returns the default trace settings
@@ -40,6 +72,7 @@ func DefaultTraceSettings() TraceSettings {
 		SessionTTL:          "24h",
 		MaxEventsPerSession: 1000,
 		CleanupProbability:  0.1,
+		TranscriptAnalysis:  DefaultTranscriptAnalysisSettings(),
 	}
 }
 
@@ -155,6 +188,7 @@ func DefaultConfig() *Config {
 			LogLevel:        "info",
 			DefaultDecision: "allow",
 			Trace:           DefaultTraceSettings(),
+			Daemon:          DefaultDaemonSettings(),
 		},
 		Rules: Rules{
 			PreToolUse: []Rule{

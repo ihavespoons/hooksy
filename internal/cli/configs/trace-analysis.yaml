@@ -16,6 +16,11 @@ settings:
     max_events_per_session: 1000
     cleanup_probability: 0.1
 
+    # Transcript analyzer settings
+    transcript_analysis:
+      enabled: true           # Enable/disable transcript pattern analysis
+      risk_threshold: 0.3     # Minimum risk score to trigger action (0.0-1.0)
+
 rules:
   PreToolUse:
     - name: block-dangerous-commands

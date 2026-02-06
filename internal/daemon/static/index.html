@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hooksy Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Hooksy Dashboard</h1>
+            <div id="connection-status" class="status disconnected">Disconnected</div>
+        </header>
+
+        <div class="stats-panel" id="stats-panel">
+            <div class="stat-card">
+                <div class="stat-value" id="total-sessions">-</div>
+                <div class="stat-label">Total Sessions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="active-sessions">-</div>
+                <div class="stat-label">Active Sessions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="events-24h">-</div>
+                <div class="stat-label">Events (24h)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="violations-24h">-</div>
+                <div class="stat-label">Violations (24h)</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="left-panel">
+                <section class="card sessions-section">
+                    <h2>Sessions</h2>
+                    <div id="sessions-list" class="sessions-list">
+                        <div class="loading">Loading sessions...</div>
+                    </div>
+                </section>
+
+                <section class="card rules-section">
+                    <h2>Active Rules</h2>
+                    <div id="rules-list" class="rules-list">
+                        <div class="loading">Loading rules...</div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="right-panel">
+                <section class="card events-section">
+                    <h2>
+                        Live Events
+                        <span class="filter-info" id="filter-info"></span>
+                    </h2>
+                    <div class="events-toolbar">
+                        <div class="filters">
+                            <select id="filter-event-type">
+                                <option value="">All Event Types</option>
+                                <option value="PreToolUse">PreToolUse</option>
+                                <option value="PostToolUse">PostToolUse</option>
+                                <option value="UserPromptSubmit">UserPromptSubmit</option>
+                                <option value="SessionStart">SessionStart</option>
+                                <option value="SessionEnd">SessionEnd</option>
+                                <option value="Stop">Stop</option>
+                            </select>
+                            <select id="filter-decision">
+                                <option value="">All Decisions</option>
+                                <option value="allow">Allow</option>
+                                <option value="deny">Deny</option>
+                                <option value="block">Block</option>
+                                <option value="ask">Ask</option>
+                            </select>
+                            <input type="text" id="filter-tool" placeholder="Tool name...">
+                        </div>
+                        <div class="actions">
+                            <button id="sort-toggle" title="Toggle sort order">Newest First</button>
+                            <button id="export-json" title="Export as JSON">Export JSON</button>
+                            <button id="export-csv" title="Export as CSV">Export CSV</button>
+                        </div>
+                    </div>
+                    <div id="events-list" class="events-list">
+                        <div class="loading">Loading events...</div>
+                    </div>
+                </section>
+
+                <section class="card violations-section">
+                    <h2>Recent Violations</h2>
+                    <div id="violations-list" class="violations-list">
+                        <div class="loading">Loading violations...</div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Detail Modal -->
+    <div id="event-modal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeEventModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Event Details</h3>
+                <button class="modal-close" onclick="closeEventModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="event-detail-content">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

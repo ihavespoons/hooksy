@@ -652,6 +652,131 @@ settings:
 	}
 }
 
+func TestMergeTranscriptAnalysisSettings(t *testing.T) {
+	base := TranscriptAnalysisSettings{
+		Enabled:       true,
+		RiskThreshold: 0.3,
+	}
+
+	t.Run("override with higher threshold", func(t *testing.T) {
+		override := TranscriptAnalysisSettings{
+			Enabled:       true,
+			RiskThreshold: 0.5,
+		}
+		result := mergeTranscriptAnalysisSettings(base, override)
+		if result.RiskThreshold != 0.5 {
+			t.Errorf("RiskThreshold should be 0.5, got %f", result.RiskThreshold)
+		}
+		if !result.Enabled {
+			t.Error("Enabled should be true")
+		}
+	})
+
+	t.Run("override disables transcript analysis", func(t *testing.T) {
+		// When override sets RiskThreshold (non-zero), Enabled is taken from override
+		override := TranscriptAnalysisSettings{
+			Enabled:       false,
+			RiskThreshold: 0.5,
+		}
+		result := mergeTranscriptAnalysisSettings(base, override)
+		if result.Enabled {
+			t.Error("Enabled should be false from override")
+		}
+		if result.RiskThreshold != 0.5 {
+			t.Errorf("RiskThreshold should be 0.5, got %f", result.RiskThreshold)
+		}
+	})
+
+	t.Run("empty override preserves base", func(t *testing.T) {
+		override := TranscriptAnalysisSettings{}
+		result := mergeTranscriptAnalysisSettings(base, override)
+		if !result.Enabled {
+			t.Error("Enabled should be preserved from base")
+		}
+		if result.RiskThreshold != 0.3 {
+			t.Errorf("RiskThreshold should be preserved from base, got %f", result.RiskThreshold)
+		}
+	})
+}
+
+func TestMergeTraceSettings_IncludesTranscriptAnalysis(t *testing.T) {
+	base := TraceSettings{
+		Enabled:            true,
+		SessionTTL:         "24h",
+		TranscriptAnalysis: TranscriptAnalysisSettings{Enabled: true, RiskThreshold: 0.3},
+	}
+
+	override := TraceSettings{
+		Enabled:            true,
+		TranscriptAnalysis: TranscriptAnalysisSettings{Enabled: true, RiskThreshold: 0.6},
+	}
+
+	result := mergeTraceSettings(base, override)
+	if result.TranscriptAnalysis.RiskThreshold != 0.6 {
+		t.Errorf("TranscriptAnalysis.RiskThreshold should be 0.6, got %f", result.TranscriptAnalysis.RiskThreshold)
+	}
+}
+
+func TestLoader_Load_TranscriptAnalysisSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	projectDir := filepath.Join(tmpDir, "project", ".hooksy")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	projectConfig := `version: "1"
+settings:
+  trace:
+    enabled: true
+    transcript_analysis:
+      enabled: true
+      risk_threshold: 0.7
+`
+	if err := os.WriteFile(filepath.Join(projectDir, "config.yaml"), []byte(projectConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader := &Loader{
+		globalPath:  filepath.Join(tmpDir, "global", ".hooksy", "config.yaml"),
+		projectPath: filepath.Join(projectDir, "config.yaml"),
+	}
+
+	cfg, err := loader.Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if !cfg.Settings.Trace.TranscriptAnalysis.Enabled {
+		t.Error("TranscriptAnalysis.Enabled should be true")
+	}
+	if cfg.Settings.Trace.TranscriptAnalysis.RiskThreshold != 0.7 {
+		t.Errorf("TranscriptAnalysis.RiskThreshold should be 0.7, got %f",
+			cfg.Settings.Trace.TranscriptAnalysis.RiskThreshold)
+	}
+}
+
+func TestDefaultTranscriptAnalysisSettings(t *testing.T) {
+	defaults := DefaultTranscriptAnalysisSettings()
+	if !defaults.Enabled {
+		t.Error("default Enabled should be true")
+	}
+	if defaults.RiskThreshold != 0.3 {
+		t.Errorf("default RiskThreshold should be 0.3, got %f", defaults.RiskThreshold)
+	}
+}
+
+func TestDefaultTraceSettings_IncludesTranscriptAnalysis(t *testing.T) {
+	defaults := DefaultTraceSettings()
+	if !defaults.TranscriptAnalysis.Enabled {
+		t.Error("default TranscriptAnalysis.Enabled should be true")
+	}
+	if defaults.TranscriptAnalysis.RiskThreshold != 0.3 {
+		t.Errorf("default TranscriptAnalysis.RiskThreshold should be 0.3, got %f",
+			defaults.TranscriptAnalysis.RiskThreshold)
+	}
+}
+
 func TestLoader_Load_SequenceRules(t *testing.T) {
 	tmpDir := t.TempDir()
 
